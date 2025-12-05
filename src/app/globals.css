@@ -1,26 +1,364 @@
 @import "tailwindcss";
 
+/* ─────────────────────────────────────────────
+   Global tokens – Single DARK theme
+   Material 3–inspired, no light / system mode
+   ───────────────────────────────────────────── */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* ---------- Surfaces & Background ---------- */
+  --background: #020617;
+  /* App background (very dark navy)          */
+  --foreground: #e5e7eb;
+  /* Default text on background               */
+
+  --surface-root: #020617;
+  /* Root shell background (header, shell)    */
+  --surface: #020617;
+  /* Main surfaces (cards, panels)            */
+  --surface-soft: #020617;
+  /* Lower elevation surface                  */
+  --surface-elevated: #020617;
+  /* Higher elevation surface                 */
+
+  --border-subtle: rgba(148, 163, 184, 0.45);
+  /* Low-emphasis borders          */
+  --border-strong: rgba(129, 140, 248, 0.85);
+  /* High-emphasis / focus border  */
+
+  /* ---------- Typography ---------- */
+  --muted-foreground: #9ca3af;
+  /* Secondary text / helper text             */
+  --soft-foreground: #64748b;
+  /* Tertiary text / placeholders             */
+
+  /* ---------- Primary (Indigo accent) ---------- */
+  --accent: #4f46e5;
+  /* Primary brand color                      */
+  --accent-soft: rgba(79, 70, 229, 0.16);
+  /* Subtle primary background       */
+  --accent-ring: rgba(79, 70, 229, 0.8);
+  /* Focus ring / outline            */
+
+  /* ---------- Semantic containers (M3 style) ---------- */
+  /* Success (used for “Assign Zone”) */
+  --success-container: #14532d;
+  /* Container background for success action  */
+  --on-success-container: #bbf7d0;
+  /* Text/icon color on success container     */
+
+  /* Danger (used for “Track”) */
+  --danger-container: #7f1d1d;
+  /* Container background for danger action   */
+  --on-danger-container: #fecaca;
+  /* Text/icon color on danger container      */
+
+  /* Warning (used for “Logs”) */
+  --warning-container: #78350f;
+  /* Container background for warning action  */
+  --on-warning-container: #fed7aa;
+  /* Text/icon color on warning container     */
+
+  /* Generic semantic colors (for icons, small badges, etc.) */
+  --success: #22c55e;
+  --danger: #ef4444;
+  --warning: #eab308;
+
+  /* ---------- Radii ---------- */
+  --radius-xs: 0.375rem;
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
+  --radius-2xl: 1.75rem;
+
+  /* ---------- Shadows ---------- */
+  --shadow-soft: 0 18px 45px rgba(15, 23, 42, 0.55);
+  --shadow-strong: 0 24px 60px rgba(15, 23, 42, 0.85);
+
+  /* ---------- Focus ring ---------- */
+  --focus-ring:
+    0 0 0 1px rgba(148, 163, 184, 0.9),
+    0 0 0 4px rgba(79, 70, 229, 0.4);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+/* ─────────────────────────────────────────────
+   Base styles – layout, typography, selection
+   ───────────────────────────────────────────── */
+@layer base {
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html,
+  body {
+    padding: 0;
+    margin: 0;
+  }
+
+  body {
+    min-height: 100vh;
+    background:
+      radial-gradient(circle at top,
+        rgba(79, 70, 229, 0.12),
+        transparent 55%),
+      linear-gradient(to bottom,
+        var(--surface-root),
+        var(--background));
+    color: var(--foreground);
+    font-family: var(--font-geist-sans), system-ui, -apple-system,
+      BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--accent) 40%, transparent);
+    color: #f9fafb;
+  }
+
+  /* Scrollbar (WebKit) */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--muted-foreground) 45%, transparent);
+    border-radius: 999px;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    letter-spacing: -0.03em;
+  }
+
+  a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+
+  a:hover {
+    text-decoration: underline;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* ─────────────────────────────────────────────
+   Component primitives (reusable building blocks)
+   ───────────────────────────────────────────── */
+@layer components {
+
+  /* Generic elevated card */
+  .card {
+    background: color-mix(in srgb, var(--surface) 92%, #020617 8%);
+    border-radius: var(--radius-2xl);
+    border: 1px solid var(--border-subtle);
+    box-shadow: var(--shadow-soft);
+  }
+
+  /* Softer, lower-emphasis card */
+  .card-soft {
+    background: color-mix(in srgb, var(--surface-soft) 94%, #020617 6%);
+    border-radius: var(--radius-xl);
+    border: 1px solid color-mix(in srgb, var(--border-subtle) 80%, transparent);
+  }
+
+  /* Base button primitive (used under Tailwind utility classes) */
+  .btn-base {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    padding-inline: 1rem;
+    padding-block: 0.55rem;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition:
+      background-color 0.18s ease,
+      border-color 0.18s ease,
+      color 0.18s ease,
+      box-shadow 0.18s ease,
+      transform 0.1s ease;
+  }
+
+  .btn-base:focus-visible {
+    outline: none;
+    box-shadow: var(--focus-ring);
+  }
+
+  /* Primary tonal button – use with .btn-base when needed */
+  .btn-primary {
+    background-color: var(--accent);
+    color: #e5e7eb;
+    border-color: color-mix(in srgb, var(--accent) 70%, transparent);
+    box-shadow: 0 10px 25px color-mix(in srgb, var(--accent) 40%, transparent);
+  }
+
+  .btn-primary:hover {
+    background-color: color-mix(in srgb, var(--accent) 90%, black 8%);
+  }
+
+  /* Low-emphasis / ghost button */
+  .btn-ghost {
+    background-color: transparent;
+    color: var(--muted-foreground);
+    border-color: color-mix(in srgb, var(--border-subtle) 40%, transparent);
+  }
+
+  .btn-ghost:hover {
+    background-color: color-mix(in srgb, var(--surface-soft) 60%, transparent);
+    color: var(--foreground);
+  }
+
+  /* Neutral pill / chip */
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding-inline: 0.7rem;
+    padding-block: 0.25rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 500;
+    border: 1px solid color-mix(in srgb, var(--border-subtle) 80%, transparent);
+    color: var(--soft-foreground);
+    background: color-mix(in srgb, var(--surface-soft) 85%, transparent);
+  }
+
+  /* Input shell used around <input> fields */
+  .input-shell {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding-inline: 0.8rem;
+    padding-block: 0.5rem;
+    border-radius: var(--radius-lg);
+    border: 1px solid color-mix(in srgb, var(--border-subtle) 90%, transparent);
+    background: color-mix(in srgb, var(--surface) 97%, transparent);
+  }
+
+  .input-shell input {
+    width: 100%;
+    background: transparent;
+    border: none;
+    outline: none;
+    font-size: 0.9rem;
+    color: var(--foreground);
+  }
+
+  .input-shell input::placeholder {
+    color: var(--soft-foreground);
+  }
+
+  /* Small status badge with a leading dot */
+  .badge-dot {
+    position: relative;
+    padding-left: 0.9rem;
+  }
+
+  .badge-dot::before {
+    content: "";
+    position: absolute;
+    left: 0.35rem;
+    top: 50%;
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background-color: var(--success);
+    transform: translateY(-50%);
+  }
+}
+
+/* ─────────────────────────────────────────────
+   Tailwind binding – map slate utilities to tokens
+   ───────────────────────────────────────────── */
+
+/* Main background surfaces */
+body .bg-slate-950 {
+  background-color: var(--background) !important;
+}
+
+body .bg-slate-900,
+body .bg-slate-900\/80 {
+  background-color: color-mix(in srgb,
+      var(--surface) 96%,
+      #020617 4%) !important;
+}
+
+body .bg-slate-900\/60,
+body .bg-slate-900\/70 {
+  background-color: color-mix(in srgb,
+      var(--surface-soft) 92%,
+      #020617 8%) !important;
+}
+
+/* Borders → use subtle border token */
+body .border-slate-800,
+body .border-slate-700 {
+  border-color: var(--border-subtle) !important;
+}
+
+/* Text colors → align slate text utilities with tokens */
+body .text-slate-50,
+body .text-white {
+  color: var(--foreground) !important;
+}
+
+body .text-slate-400 {
+  color: var(--soft-foreground) !important;
+}
+
+body .text-slate-300 {
+  color: color-mix(in srgb, var(--foreground) 80%, transparent) !important;
+}
+
+/* Rounded pills / chips → align with radius token */
+body .rounded-3xl,
+body .rounded-2xl,
+body .rounded-full {
+  border-radius: var(--radius-2xl) !important;
+}
+
+/* ─────────────────────────────────────────────
+   Button colors (right-column big actions)
+   Uses M3-style containers instead of flat colors
+   ───────────────────────────────────────────── */
+
+/* Primary actions (e.g., login button, generic blue actions) */
+body .bg-accent,
+body .hover\:bg-accent\/90:hover,
+body .bg-blue-600,
+body .hover\:bg-blue-500:hover {
+  background-color: var(--accent) !important;
+  color: #e5e7eb !important;
+}
+
+/* Assign Zone → success container tonal button */
+body .bg-emerald-600,
+body .hover\:bg-emerald-500:hover {
+  background-color: var(--success-container) !important;
+  color: var(--on-success-container) !important;
+}
+
+/* Track → danger container tonal button */
+body .bg-red-600,
+body .hover\:bg-red-500:hover {
+  background-color: var(--danger-container) !important;
+  color: var(--on-danger-container) !important;
+}
+
+/* Logs → warning container tonal button */
+body .bg-yellow-500,
+body .hover\:bg-yellow-400:hover {
+  background-color: var(--warning-container) !important;
+  color: var(--on-warning-container) !important;
 }
