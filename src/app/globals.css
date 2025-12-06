@@ -362,3 +362,47 @@ body .hover\:bg-yellow-400:hover {
   background-color: var(--warning-container) !important;
   color: var(--on-warning-container) !important;
 }
+
+/* ─────────────────────────────────────────────
+   Mobile responsiveness helpers
+   ───────────────────────────────────────────── */
+
+/* Small screens: soften radii/shadows, make actions easier to tap,
+   and ensure overflow content (tables, etc.) scroll nicely. */
+@media (max-width: 640px) {
+  body {
+    font-size: 0.95rem;
+  }
+
+  .card,
+  .card-soft {
+    border-radius: var(--radius-lg);
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.65);
+  }
+
+  .btn-base {
+    width: 100%;
+    padding-inline: 0.9rem;
+  }
+
+  .input-shell {
+    padding-inline: 0.7rem;
+    padding-block: 0.45rem;
+  }
+
+  /* Generic horizontal scroll helper for small tables / grids */
+  .scroll-x {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Optional: hide scrollbar while keeping scroll behavior */
+  .hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}

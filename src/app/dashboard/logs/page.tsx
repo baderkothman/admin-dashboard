@@ -102,10 +102,12 @@ export default function LogsPage() {
 
     let isCancelled = false;
 
-    async function load() {
+    async function load(showSpinner: boolean) {
       try {
-        setLoading(true);
-        setError("");
+        if (showSpinner) {
+          setLoading(true);
+          setError("");
+        }
 
         const res = await fetch(`/api/alerts?userId=${userIdParam}`);
         if (!res.ok) {
@@ -113,7 +115,6 @@ export default function LogsPage() {
         }
 
         const data = (await res.json()) as Alert[];
-
         if (!isCancelled) {
           setAlerts(data);
         }
@@ -123,16 +124,23 @@ export default function LogsPage() {
           setError("Failed to load logs");
         }
       } finally {
-        if (!isCancelled) {
+        if (!isCancelled && showSpinner) {
           setLoading(false);
         }
       }
     }
 
-    load();
+    // Initial load with spinner
+    load(true);
+
+    // Poll every 5 seconds without spinner
+    const intervalId = window.setInterval(() => {
+      load(false);
+    }, 5000);
 
     return () => {
       isCancelled = true;
+      window.clearInterval(intervalId);
     };
   }, [userIdParam]);
 
