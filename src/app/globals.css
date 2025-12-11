@@ -1,68 +1,9 @@
 @import "tailwindcss";
 
 /* ─────────────────────────────────────────────
-   Global tokens – Single DARK theme
-   Material 3–inspired, no light / system mode
+   Design tokens – shared (non-theme) part
    ───────────────────────────────────────────── */
 :root {
-  /* ---------- Surfaces & Background ---------- */
-  --background: #020617;
-  /* App background (very dark navy)          */
-  --foreground: #e5e7eb;
-  /* Default text on background               */
-
-  --surface-root: #020617;
-  /* Root shell background (header, shell)    */
-  --surface: #020617;
-  /* Main surfaces (cards, panels)            */
-  --surface-soft: #020617;
-  /* Lower elevation surface                  */
-  --surface-elevated: #020617;
-  /* Higher elevation surface                 */
-
-  --border-subtle: rgba(148, 163, 184, 0.45);
-  /* Low-emphasis borders          */
-  --border-strong: rgba(129, 140, 248, 0.85);
-  /* High-emphasis / focus border  */
-
-  /* ---------- Typography ---------- */
-  --muted-foreground: #9ca3af;
-  /* Secondary text / helper text             */
-  --soft-foreground: #64748b;
-  /* Tertiary text / placeholders             */
-
-  /* ---------- Primary (Indigo accent) ---------- */
-  --accent: #4f46e5;
-  /* Primary brand color                      */
-  --accent-soft: rgba(79, 70, 229, 0.16);
-  /* Subtle primary background       */
-  --accent-ring: rgba(79, 70, 229, 0.8);
-  /* Focus ring / outline            */
-
-  /* ---------- Semantic containers (M3 style) ---------- */
-  /* Success (used for “Assign Zone”) */
-  --success-container: #14532d;
-  /* Container background for success action  */
-  --on-success-container: #bbf7d0;
-  /* Text/icon color on success container     */
-
-  /* Danger (used for “Track”) */
-  --danger-container: #7f1d1d;
-  /* Container background for danger action   */
-  --on-danger-container: #fecaca;
-  /* Text/icon color on danger container      */
-
-  /* Warning (used for “Logs”) */
-  --warning-container: #78350f;
-  /* Container background for warning action  */
-  --on-warning-container: #fed7aa;
-  /* Text/icon color on warning container     */
-
-  /* Generic semantic colors (for icons, small badges, etc.) */
-  --success: #22c55e;
-  --danger: #ef4444;
-  --warning: #eab308;
-
   /* ---------- Radii ---------- */
   --radius-xs: 0.375rem;
   --radius-sm: 0.5rem;
@@ -79,6 +20,107 @@
   --focus-ring:
     0 0 0 1px rgba(148, 163, 184, 0.9),
     0 0 0 4px rgba(79, 70, 229, 0.4);
+}
+
+/* ─────────────────────────────────────────────
+   DARK THEME – clean, deep navy dashboard
+   Applied when <html data-theme="dark">
+   ───────────────────────────────────────────── */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* Layers */
+  --background: #020617;
+  /* slate-950 */
+  --foreground: #e5e7eb;
+  /* slate-200 */
+
+  --surface-root: #020617;
+  /* app shell */
+  --surface: #020617;
+  /* main cards / panels */
+  --surface-soft: #020617;
+  /* softer surfaces (rows, dropdowns) */
+  --surface-elevated: #020617;
+  /* modals / elevated cards */
+
+  /* Borders & text */
+  --border-subtle: rgba(148, 163, 184, 0.3);
+  --border-strong: rgba(129, 140, 248, 0.7);
+
+  --muted-foreground: #9ca3af;
+  --soft-foreground: #64748b;
+
+  /* Accent */
+  --accent: #6366f1;
+  /* indigo-500 */
+  --accent-soft: rgba(99, 102, 241, 0.18);
+  --accent-ring: rgba(129, 140, 248, 0.7);
+
+  /* Tonal containers (Material-ish) */
+  --success-container: rgba(22, 163, 74, 0.18);
+  --on-success-container: #bbf7d0;
+
+  --danger-container: rgba(239, 68, 68, 0.2);
+  --on-danger-container: #fee2e2;
+
+  --warning-container: rgba(234, 179, 8, 0.2);
+  --on-warning-container: #fef9c3;
+
+  /* Icon/small badge colors */
+  --success: #22c55e;
+  --danger: #ef4444;
+  --warning: #eab308;
+}
+
+/* ─────────────────────────────────────────────
+   LIGHT THEME – soft gray + white cards
+   Applied when <html data-theme="light">
+   ───────────────────────────────────────────── */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  /* Layers */
+  --background: #f3f4f6;
+  /* slate-100 */
+  --foreground: #020617;
+  /* almost-black */
+
+  --surface-root: #f3f4f6;
+  --surface: #ffffff;
+  /* main cards */
+  --surface-soft: #f9fafb;
+  /* subtle panels / rows */
+  --surface-elevated: #ffffff;
+  /* modals / elevated cards */
+
+  /* Borders & text */
+  --border-subtle: rgba(148, 163, 184, 0.4);
+  --border-strong: rgba(79, 70, 229, 0.7);
+
+  --muted-foreground: #4b5563;
+  /* slate-600 */
+  --soft-foreground: #9ca3af;
+
+  /* Accent */
+  --accent: #4f46e5;
+  --accent-soft: rgba(79, 70, 229, 0.08);
+  --accent-ring: rgba(79, 70, 229, 0.55);
+
+  /* Tonal containers */
+  --success-container: #ecfdf3;
+  --on-success-container: #166534;
+
+  --danger-container: #fef2f2;
+  --on-danger-container: #b91c1c;
+
+  --warning-container: #fffbeb;
+  --on-warning-container: #92400e;
+
+  /* Icon/small badge colors */
+  --success: #16a34a;
+  --danger: #dc2626;
+  --warning: #d97706;
 }
 
 /* ─────────────────────────────────────────────
@@ -99,17 +141,23 @@
   }
 
   body {
-    min-height: 100vh;
-    background:
-      radial-gradient(circle at top,
-        rgba(79, 70, 229, 0.12),
-        transparent 55%),
-      linear-gradient(to bottom,
-        var(--surface-root),
-        var(--background));
+    margin: 0;
+    background-color: var(--background);
     color: var(--foreground);
-    font-family: var(--font-geist-sans), system-ui, -apple-system,
-      BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+    /* Use Geist from layout.tsx when available */
+    font-family: var(--font-geist-sans, system-ui, -apple-system,
+        BlinkMacSystemFont, "Segoe UI", sans-serif);
+
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    line-height: 1.5;
+  }
+
+  code,
+  pre {
+    font-family: var(--font-geist-mono, ui-monospace, SFMono-Regular, Menlo,
+        Monaco, Consolas, "Liberation Mono", "Courier New", monospace);
   }
 
   ::selection {
@@ -150,26 +198,22 @@
 }
 
 /* ─────────────────────────────────────────────
-   Component primitives (reusable building blocks)
+   Component primitives
    ───────────────────────────────────────────── */
 @layer components {
-
-  /* Generic elevated card */
   .card {
-    background: color-mix(in srgb, var(--surface) 92%, #020617 8%);
+    background: color-mix(in srgb, var(--surface) 94%, #020617 6%);
     border-radius: var(--radius-2xl);
     border: 1px solid var(--border-subtle);
     box-shadow: var(--shadow-soft);
   }
 
-  /* Softer, lower-emphasis card */
   .card-soft {
-    background: color-mix(in srgb, var(--surface-soft) 94%, #020617 6%);
+    background: color-mix(in srgb, var(--surface-soft) 96%, transparent);
     border-radius: var(--radius-xl);
     border: 1px solid color-mix(in srgb, var(--border-subtle) 80%, transparent);
   }
 
-  /* Base button primitive (used under Tailwind utility classes) */
   .btn-base {
     display: inline-flex;
     align-items: center;
@@ -195,7 +239,6 @@
     box-shadow: var(--focus-ring);
   }
 
-  /* Primary tonal button – use with .btn-base when needed */
   .btn-primary {
     background-color: var(--accent);
     color: #e5e7eb;
@@ -207,7 +250,6 @@
     background-color: color-mix(in srgb, var(--accent) 90%, black 8%);
   }
 
-  /* Low-emphasis / ghost button */
   .btn-ghost {
     background-color: transparent;
     color: var(--muted-foreground);
@@ -219,7 +261,6 @@
     color: var(--foreground);
   }
 
-  /* Neutral pill / chip */
   .pill {
     display: inline-flex;
     align-items: center;
@@ -234,7 +275,6 @@
     background: color-mix(in srgb, var(--surface-soft) 85%, transparent);
   }
 
-  /* Input shell used around <input> fields */
   .input-shell {
     display: flex;
     align-items: center;
@@ -259,7 +299,6 @@
     color: var(--soft-foreground);
   }
 
-  /* Small status badge with a leading dot */
   .badge-dot {
     position: relative;
     padding-left: 0.9rem;
@@ -279,61 +318,70 @@
 }
 
 /* ─────────────────────────────────────────────
-   Tailwind binding – map slate utilities to tokens
+   Tailwind bindings – map slate utilities to tokens
    ───────────────────────────────────────────── */
 
 /* Main background surfaces */
-body .bg-slate-950 {
-  background-color: var(--background) !important;
+body .bg-slate-950,
+body .bg-slate-950\/80 {
+  background-color: var(--surface-root) !important;
 }
 
 body .bg-slate-900,
 body .bg-slate-900\/80 {
-  background-color: color-mix(in srgb,
-      var(--surface) 96%,
-      #020617 4%) !important;
+  background-color: var(--surface) !important;
 }
 
 body .bg-slate-900\/60,
 body .bg-slate-900\/70 {
-  background-color: color-mix(in srgb,
-      var(--surface-soft) 92%,
-      #020617 8%) !important;
+  background-color: var(--surface-soft) !important;
 }
 
-/* Borders → use subtle border token */
+/* FIX: row hover state – keep text visible in light & dark */
+body .hover\:bg-slate-900\/70:hover,
+body .hover\:bg-slate-900\/60:hover {
+  background-color: color-mix(in srgb, var(--surface-soft) 94%, #020617 6%) !important;
+}
+
+/* Borders */
 body .border-slate-800,
 body .border-slate-700 {
   border-color: var(--border-subtle) !important;
 }
 
-/* Text colors → align slate text utilities with tokens */
+/* Text colors – remap slate palette to theme tokens */
+body .text-slate-950,
+body .text-slate-900,
+body .text-slate-800,
+body .text-slate-700,
 body .text-slate-50,
+body .text-slate-100,
+body .text-slate-200,
 body .text-white {
+  /* Strong / primary text */
   color: var(--foreground) !important;
 }
 
-body .text-slate-400 {
+body .text-slate-600,
+body .text-slate-500 {
+  /* Secondary / muted text */
+  color: var(--muted-foreground) !important;
+}
+
+body .text-slate-400,
+body .text-slate-300 {
+  /* Soft / tertiary text */
   color: var(--soft-foreground) !important;
 }
 
-body .text-slate-300 {
-  color: color-mix(in srgb, var(--foreground) 80%, transparent) !important;
-}
-
-/* Rounded pills / chips → align with radius token */
+/* Rounded pills */
 body .rounded-3xl,
 body .rounded-2xl,
 body .rounded-full {
   border-radius: var(--radius-2xl) !important;
 }
 
-/* ─────────────────────────────────────────────
-   Button colors (right-column big actions)
-   Uses M3-style containers instead of flat colors
-   ───────────────────────────────────────────── */
-
-/* Primary actions (e.g., login button, generic blue actions) */
+/* Primary / accent buttons */
 body .bg-accent,
 body .hover\:bg-accent\/90:hover,
 body .bg-blue-600,
@@ -351,14 +399,18 @@ body .hover\:bg-emerald-500:hover {
 
 /* Track → danger container tonal button */
 body .bg-red-600,
-body .hover\:bg-red-500:hover {
+body .bg-red-700,
+body .hover\:bg-red-500:hover,
+body .hover\:bg-red-600:hover {
   background-color: var(--danger-container) !important;
   color: var(--on-danger-container) !important;
 }
 
 /* Logs → warning container tonal button */
 body .bg-yellow-500,
-body .hover\:bg-yellow-400:hover {
+body .hover\:bg-yellow-400:hover,
+body .bg-\[\#a28f00\],
+body .hover\:bg-\[\#c3aa03\]:hover {
   background-color: var(--warning-container) !important;
   color: var(--on-warning-container) !important;
 }
@@ -366,9 +418,6 @@ body .hover\:bg-yellow-400:hover {
 /* ─────────────────────────────────────────────
    Mobile responsiveness helpers
    ───────────────────────────────────────────── */
-
-/* Small screens: soften radii/shadows, make actions easier to tap,
-   and ensure overflow content (tables, etc.) scroll nicely. */
 @media (max-width: 640px) {
   body {
     font-size: 0.95rem;
@@ -390,13 +439,11 @@ body .hover\:bg-yellow-400:hover {
     padding-block: 0.45rem;
   }
 
-  /* Generic horizontal scroll helper for small tables / grids */
   .scroll-x {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
   }
 
-  /* Optional: hide scrollbar while keeping scroll behavior */
   .hide-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;

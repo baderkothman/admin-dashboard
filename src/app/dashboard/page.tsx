@@ -1,913 +1,571 @@
-// src/app/dashboard/page.tsx
 "use client";
 
-/**
- * DashboardPage
- * -------------
- * Main admin dashboard for the geofencing system.
- *
- * Responsibilities:
- *  - Client-side "auth" using localStorage("adminAuth") === "true".
- *  - Fetch and display non-admin users with search + pagination.
- *  - Show global alerts in a bell dropdown (and allow "clear" + "refresh").
- *  - Let the admin:
- *      • Assign / update a geofence zone on a map (UserMapModal).
- *      • Live-track a user on a map (UserTrackModal).
- *      • Open a per-user logs page.
- *
- * Extra behavior:
- *  - Alerts persistence:
- *      • When "Clear" is clicked in the alerts dropdown:
- *          - Store a timestamp in localStorage("alerts-cleared-until").
- *          - Immediately clear the alerts from state.
- *      • When alerts are fetched from /api/alerts:
- *          - Only keep alerts that happened AFTER the stored timestamp.
- *
- *  - Returning from logs:
- *      • Logs page redirects back to `/dashboard?userId=<id>`.
- *      • Dashboard reads that `userId` from the query string.
- *      • The matching user is auto-selected in the users list.
- */
-
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import React, { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
+import { FaBell, FaEye, FaDownload, FaCircle } from "react-icons/fa";
+import ThemeToggle from "@/components/ThemeToggle";
 
-/**
- * Lazy-loaded modals:
- *
- * - UserMapModal:
- *     Used to assign / edit a geofence zone for a specific user.
- *     Requires access to `window` (Leaflet map), so SSR is disabled.
- *
- * - UserTrackModal:
- *     Used to show live tracking of a single user on a map.
- */
+// Load the Leaflet-based modals only on the client
 const UserMapModal = dynamic(() => import("@/components/UserMapModal"), {
   ssr: false,
 });
+
 const UserTrackModal = dynamic(() => import("@/components/UserTrackModal"), {
   ssr: false,
 });
 
-/** LocalStorage key used to persist the "clear alerts" timestamp. */
-const ALERTS_CLEAR_KEY = "alerts-cleared-until";
-
-/**
- * User
- * ----
- * Shape of a user row as returned by /api/users.
- *
- * Includes:
- *   - Identity & role (id, username, role).
- *   - Zone assignment (zone_center_* + zone_radius_m).
- *   - Creation time.
- *   - Last known location + zone status (from user_locations join).
- */
-interface User {
+type User = {
   id: number;
+  full_name?: string | null;
   username: string;
-  role: "admin" | "user";
-  zone_center_lat: number | string | null;
-  zone_center_lng: number | string | null;
-  zone_radius_m: number | string | null;
-  created_at: string;
-
-  last_latitude: number | string | null;
-  last_longitude: number | string | null;
-  inside_zone: number | null;
+  phone?: string | null;
+  email?: string | null;
+  role: string;
+  zone_center_lat: number | null;
+  zone_center_lng: number | null;
+  zone_radius_m: number | null;
+  inside_zone: boolean | 0 | 1 | "0" | "1" | null;
   last_seen: string | null;
-}
+  last_latitude: number | null;
+  last_longitude: number | null;
+};
 
-/**
- * Alert
- * -----
- * Shape of an alert row as returned by /api/alerts.
- */
-interface Alert {
+type Alert = {
   id: number;
   user_id: number;
-  username: string;
-  alert_type: "exit" | "enter";
+  username?: string;
+  alert_type: "enter" | "exit" | string;
   occurred_at: string;
-  latitude: number | null;
-  longitude: number | null;
-}
+  latitude?: number | null;
+  longitude?: number | null;
+};
 
-/**
- * UserAvatarIcon
- * --------------
- * Neutral SVG avatar used in the users list and the user detail panel.
- * (No emojis, only vector.)
- */
-function UserAvatarIcon({ size = 24 }: { size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-      className="fill-slate-300"
-    >
-      {/* Head */}
-      <circle cx="12" cy="8" r="4" />
-      {/* Shoulders / torso */}
-      <path d="M4 19c0-3.2 2.7-5.5 8-5.5s8 2.3 8 5.5v1H4z" />
-    </svg>
-  );
-}
-
-/**
- * BellIcon
- * --------
- * Simple SVG bell for the global alerts button.
- */
-function BellIcon({ size = 18 }: { size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-      className="fill-slate-300"
-    >
-      {/* Bell body */}
-      <path d="M12 2a6 6 0 0 0-6 6v3.1L4.3 13.7A1 1 0 0 0 5 15h14a1 1 0 0 0 .7-1.7L18 11.1V8a6 6 0 0 0-6-6z" />
-      {/* Bell clapper */}
-      <path d="M10 18a2 2 0 0 0 4 0h-4z" />
-    </svg>
-  );
-}
-
-export default function DashboardPage() {
+const DashboardPage: React.FC = () => {
   const router = useRouter();
-  const searchParams = useSearchParams();
 
-  /**
-   * If we returned from /dashboard/logs?userId=XX,
-   * we read that query param to pre-select this user.
-   */
-  const userIdFromQuery = searchParams.get("userId");
-  const initialSelectedUserId =
-    userIdFromQuery && !Number.isNaN(Number(userIdFromQuery))
-      ? Number(userIdFromQuery)
-      : null;
+  // null = not yet loaded; [] = loaded but no users
+  const [users, setUsers] = useState<User[] | null>(null);
+  const [usersError, setUsersError] = useState<string | null>(null);
 
-  // -------------------------
-  // Core data (users & alerts)
-  // -------------------------
-  const [users, setUsers] = useState<User[]>([]);
-  const [alerts, setAlerts] = useState<Alert[]>([]);
-
-  // -------------------------
-  // UI state
-  // -------------------------
-  const [loadingUsers, setLoadingUsers] = useState(true);
-  const [error, setError] = useState("");
-  const [showAlertsDropdown, setShowAlertsDropdown] = useState(false);
-  const [search, setSearch] = useState("");
-
-  /**
-   * isAuthorized:
-   *   - Controls whether we render the dashboard and start polling data.
-   *   - Derived from localStorage("adminAuth") in a client-side effect.
-   */
-  const [isAuthorized, setIsAuthorized] = useState(false);
-
-  /**
-   * Selection & modal state:
-   *   - selectedUserId: user currently displayed in the right panel.
-   *   - mapUserId: user whose zone is being edited on the map (modal).
-   *   - trackedUserId: user being live-tracked on the map (modal).
-   */
-  const [selectedUserId, setSelectedUserId] = useState<number | null>(
-    initialSelectedUserId
+  const [selectedUserForZone, setSelectedUserForZone] = useState<User | null>(
+    null
   );
-  const [mapUserId, setMapUserId] = useState<number | null>(null);
-  const [trackedUserId, setTrackedUserId] = useState<number | null>(null);
+  const [selectedUserForTrack, setSelectedUserForTrack] = useState<User | null>(
+    null
+  );
 
-  /**
-   * Pagination state:
-   *   - currentPage: current page of the filtered users list.
-   *   - pageSize: how many users to show per page.
-   */
-  const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 5;
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [alertsOpen, setAlertsOpen] = useState(false);
 
-  // -------------------------------------------------
-  // 1) Client-side auth (localStorage("adminAuth") === "true")
-  // -------------------------------------------------
+  // ─────────────────────────────────────────────
+  // Auth guard
+  // ─────────────────────────────────────────────
   useEffect(() => {
-    // Read simple auth flag from localStorage.
-    const authFlag =
-      typeof window !== "undefined"
-        ? window.localStorage.getItem("adminAuth")
-        : null;
+    if (typeof window === "undefined") return;
 
-    // If not present or not "true", redirect to login page.
-    if (authFlag !== "true") {
+    const isAuthed = localStorage.getItem("adminAuth") === "true";
+    if (!isAuthed) {
       router.replace("/");
-      return;
     }
-
-    // Otherwise allow the dashboard to render and start data fetching.
-    setIsAuthorized(true);
   }, [router]);
 
-  // -------------------------------------------------
-  // 2) Data fetching helpers (users + alerts)
-  // -------------------------------------------------
-
-  /**
-   * fetchUsers
-   * ----------
-   * Fetch the list of non-admin users from /api/users.
-   *
-   * - showSpinner:
-   *     - When true, we show the "Loading users..." message.
-   *     - When false, we silently refresh the list in the background.
-   */
-  const fetchUsers = useCallback(
-    async (showSpinner = false) => {
-      if (showSpinner) setLoadingUsers(true);
-      try {
-        const res = await fetch("/api/users");
-        if (!res.ok) throw new Error("Failed to load users");
-
-        const data = (await res.json()) as User[];
-        setUsers(data);
-
-        // On first load: auto-select a user if none is selected yet
-        if (data.length > 0 && selectedUserId === null) {
-          setSelectedUserId(data[0].id);
-        }
-      } catch (err) {
-        console.error(err);
-        setError("Failed to load users");
-      } finally {
-        if (showSpinner) setLoadingUsers(false);
-      }
-    },
-    [selectedUserId]
-  );
-
-  /**
-   * fetchAlerts
-   * -----------
-   * Fetch the global alerts list from /api/alerts.
-   *
-   * Behavior:
-   *   - Loads alerts from the backend.
-   *   - Reads "alerts-cleared-until" timestamp from localStorage (if any).
-   *   - Filters out any alerts that occurred BEFORE that timestamp.
-   *   - Updates the `alerts` state with the filtered list.
-   */
-  const fetchAlerts = useCallback(async () => {
-    try {
-      const res = await fetch("/api/alerts");
-      if (!res.ok) return;
-
-      const data = (await res.json()) as Alert[];
-
-      let filtered = data;
-
-      if (typeof window !== "undefined") {
-        const cutoffIso = window.localStorage.getItem(ALERTS_CLEAR_KEY);
-
-        if (cutoffIso) {
-          const cutoffDate = new Date(cutoffIso);
-
-          if (!Number.isNaN(cutoffDate.getTime())) {
-            filtered = data.filter((a) => {
-              const t = new Date(a.occurred_at);
-              if (Number.isNaN(t.getTime())) {
-                // If parsing fails, keep the alert instead of hiding it.
-                return true;
-              }
-              return t > cutoffDate;
-            });
-          }
-        }
-      }
-
-      setAlerts(filtered);
-    } catch (err) {
-      console.error(err);
-      // We intentionally do not show a visible error for alerts fetch;
-      // the dashboard still works without the dropdown.
-    }
-  }, []);
-
-  // -------------------------------------------------
-  // 3) Initial fetch + polling (only when authorized)
-  // -------------------------------------------------
+  // ─────────────────────────────────────────────
+  // Load users (near real-time refresh)
+  // ─────────────────────────────────────────────
   useEffect(() => {
-    // Do nothing until we confirmed the admin is authorized.
-    if (!isAuthorized) return;
+    const fetchUsers = async () => {
+      try {
+        const res = await fetch("/api/users", { cache: "no-store" });
+        if (!res.ok) {
+          throw new Error("Failed to load users");
+        }
 
-    // Initial load of users + alerts.
-    fetchUsers(true);
-    fetchAlerts();
+        const data: User[] = await res.json();
+        const nonAdmins = data.filter((u) => u.role !== "admin");
 
-    // Poll every 5 seconds to keep dashboard updated.
+        setUsers((prev) => {
+          if (prev === null) return nonAdmins;
+
+          const prevStr = JSON.stringify(prev);
+          const nextStr = JSON.stringify(nonAdmins);
+          if (prevStr === nextStr) {
+            return prev;
+          }
+          return nonAdmins;
+        });
+
+        setUsersError(null);
+      } catch (err: unknown) {
+        if (err instanceof Error) {
+          setUsersError(err.message);
+        } else {
+          setUsersError("Failed to load users");
+        }
+      }
+    };
+
+    void fetchUsers();
+
     const interval = setInterval(() => {
-      fetchUsers(false);
-      fetchAlerts();
-    }, 5000);
+      void fetchUsers();
+    }, 3000);
 
     return () => clearInterval(interval);
-  }, [isAuthorized, fetchUsers, fetchAlerts]);
+  }, []);
 
-  /**
-   * Whenever the search term changes, restart from page 1,
-   * so the user sees the first page of filtered results.
-   */
+  // Keep tracking modal synced with latest users list
   useEffect(() => {
-    setCurrentPage(1);
-  }, [search]);
+    if (!selectedUserForTrack || users === null) return;
 
-  // -------------------------------------------------
-  // 4) Derived state (selected user, filtered users, pagination, etc.)
-  // -------------------------------------------------
+    const updated = users.find((u) => u.id === selectedUserForTrack.id);
+    if (!updated || updated === selectedUserForTrack) return;
 
-  /** Currently selected user object (or null if none). */
-  const selectedUser = useMemo(
-    () =>
-      selectedUserId == null
-        ? null
-        : users.find((u) => u.id === selectedUserId) ?? null,
-    [selectedUserId, users]
-  );
+    setSelectedUserForTrack(updated);
+  }, [users, selectedUserForTrack]);
 
-  /** User being live-tracked (if any). */
-  const trackedUser = useMemo(
-    () =>
-      trackedUserId == null
-        ? null
-        : users.find((u) => u.id === trackedUserId) ?? null,
-    [trackedUserId, users]
-  );
-
-  /** User whose zone is being edited on the map (if any). */
-  const mapUser = useMemo(
-    () =>
-      mapUserId == null ? null : users.find((u) => u.id === mapUserId) ?? null,
-    [mapUserId, users]
-  );
-
-  /**
-   * filteredUsers:
-   *   - Applies a simple case-insensitive search by username.
-   *   - If search is empty, returns the full list.
-   */
-  const filteredUsers = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return users;
-    return users.filter((u) => u.username.toLowerCase().includes(q));
-  }, [users, search]);
-
-  /**
-   * totalPages:
-   *   - Number of pages based on filtered users count and page size.
-   *   - Minimum is 1 even if there are no users (for UI simplicity).
-   */
-  const totalPages = Math.max(
-    1,
-    Math.ceil(filteredUsers.length / pageSize || 1)
-  );
-
-  /**
-   * Ensure currentPage is always within [1, totalPages].
-   * If filtering reduces total pages, we clamp down.
-   */
+  // ─────────────────────────────────────────────
+  // Load alerts (near real-time)
+  // ─────────────────────────────────────────────
   useEffect(() => {
-    if (currentPage > totalPages) {
-      setCurrentPage(totalPages);
-    }
-  }, [currentPage, totalPages]);
+    const fetchAlerts = async () => {
+      try {
+        const res = await fetch("/api/alerts", { cache: "no-store" });
+        if (!res.ok) return;
 
-  /**
-   * pagedUsers:
-   *   - Slice of `filteredUsers` that belongs to the current page.
-   */
-  const pagedUsers = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return filteredUsers.slice(start, start + pageSize);
-  }, [filteredUsers, currentPage]);
+        const data = (await res.json()) as Alert[];
 
-  /**
-   * Helper booleans for the selected user.
-   */
+        if (typeof window !== "undefined") {
+          const clearedUntilStr = localStorage.getItem("alerts-cleared-until");
+          let filtered = data;
 
-  /** True when the selected user has a full zone assigned (center + radius). */
-  const selectedUserHasZone =
-    selectedUser &&
-    selectedUser.zone_center_lat != null &&
-    selectedUser.zone_center_lng != null &&
-    selectedUser.zone_radius_m != null;
+          if (clearedUntilStr) {
+            const clearedUntil = new Date(clearedUntilStr);
+            filtered = data.filter(
+              (a) => new Date(a.occurred_at) > clearedUntil
+            );
+          }
 
-  /** True when the selected user has a last known location. */
-  const selectedUserHasLocation =
-    selectedUser &&
-    selectedUser.last_latitude != null &&
-    selectedUser.last_longitude != null;
-
-  /**
-   * selectedUserInside:
-   *   - null      → zone status unknown (no inside_zone info yet).
-   *   - true      → user is inside their zone.
-   *   - false     → user is outside their zone.
-   */
-  const selectedUserInside =
-    selectedUserHasLocation && selectedUser?.inside_zone != null
-      ? selectedUser.inside_zone === 1
-      : null;
-
-  // -------------------------------------------------
-  // 5) Actions (save zone, open logs, logout, clear alerts, etc.)
-  // -------------------------------------------------
-
-  /**
-   * saveZone
-   * --------
-   * Called by UserMapModal when the admin saves a new/updated zone.
-   *
-   * - Sends a PUT request to /api/users/:id with:
-   *     - zone_center_lat
-   *     - zone_center_lng
-   *     - zone_radius_m
-   * - On success:
-   *     - Close the map modal.
-   *     - Refresh users list to reflect updated zone.
-   */
-  async function saveZone(
-    userId: number,
-    lat: number,
-    lng: number,
-    radius: number
-  ) {
-    try {
-      const res = await fetch(`/api/users/${userId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          zone_center_lat: lat,
-          zone_center_lng: lng,
-          zone_radius_m: radius,
-        }),
-      });
-
-      if (!res.ok) {
-        let message = "Failed to save zone";
-
-        // Try to read an error message from the response body.
-        try {
-          const data = (await res.json()) as { message?: string };
-          console.error("Save zone failed:", data);
-          if (data?.message) message = data.message;
-        } catch (parseErr) {
-          console.error("Save zone failed, non-JSON response", parseErr);
+          const sorted = filtered.sort(
+            (a, b) =>
+              new Date(b.occurred_at).getTime() -
+              new Date(a.occurred_at).getTime()
+          );
+          setAlerts(sorted.slice(0, 15));
+        } else {
+          setAlerts(data);
         }
-
-        alert(message);
-        return;
+      } catch {
+        // non-critical
       }
+    };
 
-      // Close modal and refresh user list silently.
-      setMapUserId(null);
-      fetchUsers(false);
-    } catch (err) {
-      console.error(err);
-      alert("Failed to save zone");
+    fetchAlerts();
+    const interval = setInterval(fetchAlerts, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // ─────────────────────────────────────────────
+  // Helpers
+  // ─────────────────────────────────────────────
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/logout", { method: "POST" });
+    } catch {
+      // ignore
     }
-  }
 
-  /**
-   * handleDownloadAllLogsCsv
-   * ------------------------
-   * Triggers a CSV download containing ALL alerts in the system.
-   *
-   * Implementation:
-   *   - Opens `/api/alerts?format=csv` in a new tab.
-   *   - Browser handles download behavior.
-   */
-  function handleDownloadAllLogsCsv() {
-    const url = "/api/alerts?format=csv";
-    window.open(url, "_blank");
-  }
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("adminAuth");
+      localStorage.removeItem("adminUsername");
+    }
 
-  /**
-   * handleOpenUserLogs
-   * ------------------
-   * Navigates to the logs page for a specific user:
-   *   - `/dashboard/logs?userId=<id>`
-   *
-   * The Logs page will in turn allow returning to the dashboard with the
-   * same `userId` pre-selected.
-   */
-  function handleOpenUserLogs(userId: number) {
+    router.replace("/");
+  };
+
+  const handleViewLogs = (userId: number) => {
     router.push(`/dashboard/logs?userId=${userId}`);
-  }
+  };
 
-  /**
-   * logout
-   * ------
-   * Simple logout:
-   *   - Remove the "adminAuth" flag from localStorage.
-   *   - Navigate back to the login page (`/`).
-   */
-  function logout() {
+  const handleDownloadUserLogs = (userId: number) => {
     if (typeof window !== "undefined") {
-      window.localStorage.removeItem("adminAuth");
+      window.location.href = `/api/alerts?userId=${userId}&format=csv`;
     }
-    router.push("/");
-  }
+  };
 
-  /**
-   * handleClearAlerts
-   * -----------------
-   * Persistently clears the visible alerts:
-   *
-   *   1. Stores the current time (ISO string) in localStorage("alerts-cleared-until").
-   *   2. Immediately empties the `alerts` state so UI updates instantly.
-   *
-   * On the next `fetchAlerts` call, any older alerts are ignored.
-   */
-  function handleClearAlerts() {
+  const handleDownloadAllLogs = () => {
     if (typeof window !== "undefined") {
-      const nowIso = new Date().toISOString();
-      window.localStorage.setItem(ALERTS_CLEAR_KEY, nowIso);
+      window.location.href = `/api/alerts?format=csv`;
+    }
+  };
+
+  const handleClearAlerts = () => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("alerts-cleared-until", new Date().toISOString());
     }
     setAlerts([]);
-  }
+  };
 
-  // -------------------------------------------------
-  // 6) Render
-  // -------------------------------------------------
+  const hasZone = (u: User) =>
+    u.zone_center_lat !== null &&
+    u.zone_center_lng !== null &&
+    u.zone_radius_m !== null;
+
+  const isInsideZone = (u: User): boolean => {
+    return (
+      u.inside_zone === true || u.inside_zone === 1 || u.inside_zone === "1"
+    );
+  };
+
+  const formatContact = (u: User) => {
+    if (u.phone) return u.phone;
+    if (u.email) return u.email;
+    return "—";
+  };
+
+  const formatDateTime = (iso: string | null) => {
+    if (!iso) return "Never";
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "Never";
+    return d.toLocaleString();
+  };
+
+  // ─────────────────────────────────────────────
+  // UI
+  // ─────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      {/* Top bar: title, global alerts, download logs, logout */}
-      <header className="relative flex items-center justify-between px-8 py-4 border-b border-slate-800 bg-slate-900/80 backdrop-blur">
-        <h1 className="text-xl font-semibold tracking-tight">
-          Admin Dashboard
-        </h1>
+    <main className="min-h-screen bg-background text-foreground flex flex-col">
+      {/* Top bar */}
+      <header className="px-4 sm:px-6 lg:px-8 py-3 sm:py-4 border-b border-slate-800 bg-slate-950/80 backdrop-blur flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-lg sm:text-xl font-semibold tracking-tight">
+            Admin Dashboard
+          </h1>
+          <p className="mt-1 text-xs sm:text-sm text-slate-400">
+            Manage users, geofence zones and live location tracking.
+          </p>
+        </div>
 
-        <div className="flex items-center gap-4">
-          {/* Global alerts bell with dropdown */}
+        <div className="flex items-center gap-3 sm:gap-4">
+          {/* Theme toggle */}
+          <ThemeToggle />
+
+          {/* Alerts bell */}
           <div className="relative">
             <button
-              onClick={() => {
-                // Toggle dropdown visibility and refresh alerts immediately.
-                setShowAlertsDropdown((prev) => !prev);
-                fetchAlerts();
-              }}
-              className="relative rounded-full border border-slate-700 w-9 h-9 flex items-center justify-center hover:bg-slate-800"
-              aria-label="Alerts"
+              type="button"
+              onClick={() => setAlertsOpen((prev) => !prev)}
+              className="btn-base btn-ghost !h-10 !w-10 !p-0 rounded-full border border-slate-700 bg-slate-900 hover:bg-slate-800"
             >
-              <BellIcon size={18} />
+              <FaBell className="text-sm" aria-hidden="true" />
               {alerts.length > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-[10px] font-semibold rounded-full px-1.5 py-0.5 text-white">
-                  {alerts.length}
+                <span className="absolute -top-0.5 -right-0.5 inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-emerald-500">
+                  <span className="sr-only">Unread alerts</span>
                 </span>
               )}
             </button>
 
-            {/* Alerts dropdown panel */}
-            {showAlertsDropdown && (
-              <div className="absolute right-0 mt-2 w-80 max-h-96 overflow-y-auto bg-slate-900 border border-slate-700 rounded-xl shadow-xl z-50">
-                <div className="flex items-center justify-between px-3 py-2 border-b border-slate-700">
-                  <span className="text-sm font-medium">Recent Alerts</span>
+            {alertsOpen && (
+              <div className="absolute right-0 mt-3 w-80 rounded-2xl border border-slate-800 bg-slate-950 shadow-[var(--shadow-strong)] z-20">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800">
+                  <span className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                    Recent Alerts
+                  </span>
                   <div className="flex gap-2">
                     <button
                       onClick={handleClearAlerts}
-                      className="text-[11px] px-2 py-1 rounded border border-slate-600 hover:bg-slate-800"
+                      className="text-[11px] text-slate-400 hover:text-slate-200"
                     >
                       Clear
                     </button>
                     <button
-                      onClick={fetchAlerts}
-                      className="text-[11px] px-2 py-1 rounded border border-slate-600 hover:bg-slate-800"
+                      onClick={handleDownloadAllLogs}
+                      className="text-[11px] text-emerald-400 hover:text-emerald-300"
                     >
-                      Refresh
+                      Download all
                     </button>
                   </div>
                 </div>
+                <div className="max-h-80 overflow-y-auto py-1">
+                  {alerts.length === 0 && (
+                    <div className="px-4 py-6 text-xs text-slate-500 text-center">
+                      No alerts after the last clear.
+                    </div>
+                  )}
 
-                {alerts.length === 0 ? (
-                  <p className="px-3 py-3 text-xs text-slate-400">No alerts.</p>
-                ) : (
-                  <ul className="divide-y divide-slate-800 text-xs">
-                    {alerts.slice(0, 30).map((a) => (
-                      <li key={a.id} className="px-3 py-2">
-                        <div className="flex justify-between">
-                          <span className="font-medium">{a.username}</span>
-                          <span
-                            className={
-                              a.alert_type === "exit"
-                                ? "text-red-400"
-                                : "text-emerald-400"
-                            }
-                          >
-                            {a.alert_type.toUpperCase()}
-                          </span>
+                  {alerts.map((alert) => {
+                    const isEnter = alert.alert_type === "enter";
+                    return (
+                      <div
+                        key={alert.id}
+                        className="flex items-start gap-2 px-4 py-2.5 hover:bg-slate-900/70 transition-colors"
+                      >
+                        <FaCircle
+                          className={`mt-1 text-[8px] ${
+                            isEnter ? "text-emerald-400" : "text-rose-400"
+                          }`}
+                        />
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-xs font-medium text-slate-100">
+                              {isEnter ? "Entered zone" : "Left zone"}
+                            </p>
+                            <span className="text-[10px] text-slate-500">
+                              {new Date(alert.occurred_at).toLocaleTimeString()}
+                            </span>
+                          </div>
+                          <p className="mt-0.5 text-[11px] text-slate-400">
+                            {alert.username ?? `User #${alert.user_id}`}
+                          </p>
                         </div>
-                        <div className="text-[11px] text-slate-400">
-                          {new Date(a.occurred_at).toLocaleString()}
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </div>
 
-          {/* Download ALL logs across users as CSV */}
-          <button
-            type="button"
-            onClick={handleDownloadAllLogsCsv}
-            className="rounded-xl border border-slate-700 px-4 py-1.5 text-sm hover:bg-slate-800"
-          >
-            Download All Logs
-          </button>
-
           {/* Logout button */}
           <button
-            onClick={logout}
-            className="rounded-xl border border-slate-700 px-4 py-1.5 text-sm hover:bg-slate-800"
+            onClick={handleLogout}
+            className="btn-base btn-ghost rounded-full border border-slate-700 bg-slate-900 hover:bg-slate-800 text-xs sm:text-sm"
           >
             Logout
           </button>
         </div>
       </header>
 
-      {/* Main two-column layout */}
-      <main className="p-6 lg:p-8">
-        {/* Top-level error banner (for users loading) */}
-        {error && (
-          <div className="mb-4 rounded-xl border border-red-500/40 bg-red-950/40 px-4 py-2 text-sm text-red-300">
-            {error}
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1.2fr)] gap-6">
-          {/* LEFT COLUMN: Users list with search + pagination */}
-          <section className="bg-slate-900/80 rounded-3xl border border-slate-800 px-6 py-5 flex flex-col min-h-[480px]">
-            <h2 className="text-lg font-semibold mb-4">Users</h2>
-
-            {/* Search input */}
-            <div className="mb-4">
-              <input
-                type="text"
-                placeholder="Search"
-                className="w-full rounded-2xl bg-slate-950/60 border border-slate-700 px-4 py-2 text-sm outline-none focus:border-blue-500"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </div>
-
-            {/* Loading / empty / list states */}
-            {loadingUsers ? (
-              <p className="text-sm text-slate-400">Loading users...</p>
-            ) : filteredUsers.length === 0 ? (
-              <p className="text-sm text-slate-400">
-                No users found. Create some users in the system first.
+      {/* Main content */}
+      <section className="flex-1 px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+        <div className="card">
+          {/* Card header */}
+          <div className="px-4 sm:px-6 py-4 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div>
+              <p className="text-sm font-medium">Users Overview</p>
+              <p className="text-xs text-slate-500 mt-1">
+                Full list of mobile users, their assigned zones and current
+                status.
               </p>
-            ) : (
-              <div className="mt-2 flex flex-col flex-1">
-                {/* Users list */}
-                <div className="space-y-3 overflow-y-auto pr-1 flex-1">
-                  {pagedUsers.map((u) => {
-                    const hasZone =
-                      u.zone_center_lat != null &&
-                      u.zone_center_lng != null &&
-                      u.zone_radius_m != null;
+            </div>
+          </div>
 
-                    const isSelected = selectedUserId === u.id;
+          {/* Table */}
+          <div className="scroll-x hide-scrollbar">
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="text-[11px] sm:text-xs uppercase tracking-wide text-slate-400">
+                    <th className="px-4 sm:px-6 py-3 text-left font-medium">
+                      Full Name
+                    </th>
+                    <th className="px-4 sm:px-6 py-3 text-left font-medium">
+                      Username
+                    </th>
+                    <th className="px-4 sm:px-6 py-3 text-left font-medium">
+                      Contact
+                    </th>
+                    <th className="px-4 sm:px-6 py-3 text-left font-medium">
+                      Assigned Zone
+                    </th>
+                    <th className="px-4 sm:px-6 py-3 text-left font-medium">
+                      Status
+                    </th>
+                    <th className="px-4 sm:px-6 py-3 text-center font-medium">
+                      Track
+                    </th>
+                    <th className="px-4 sm:px-6 py-3 text-center font-medium">
+                      Logs
+                    </th>
+                  </tr>
+                </thead>
 
-                    return (
-                      <div
-                        key={u.id}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => setSelectedUserId(u.id)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            setSelectedUserId(u.id);
-                          }
-                        }}
-                        className={`w-full text-left rounded-2xl border px-4 py-3 flex items-center justify-between gap-3 transition-colors cursor-pointer ${
-                          isSelected
-                            ? "border-blue-500 bg-slate-800/80"
-                            : "border-slate-700 bg-slate-900/60 hover:bg-slate-800/60"
-                        }`}
+                <tbody className="divide-y divide-slate-800">
+                  {/* Initial loading state only (users === null) */}
+                  {users === null && !usersError && (
+                    <tr>
+                      <td
+                        colSpan={7}
+                        className="px-4 sm:px-6 py-10 text-center text-slate-500 text-sm"
                       >
-                        {/* Left: avatar + basic info */}
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-800">
-                            <UserAvatarIcon size={20} />
-                          </div>
-                          <div className="flex flex-col">
-                            <span className="text-sm font-medium">
-                              {u.username}
-                            </span>
-                            <span className="text-[11px] text-slate-400">
-                              Assigned Zone:{" "}
-                              {hasZone
-                                ? `${Number(u.zone_radius_m)} m`
-                                : "Not assigned"}
-                            </span>
-                          </div>
-                        </div>
+                        Loading users…
+                      </td>
+                    </tr>
+                  )}
 
-                        {/* Right: small status pill */}
-                        <div className="flex flex-col items-end gap-1">
-                          <span className="text-xs rounded-full border border-slate-600 px-3 py-1">
-                            View Status
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                  {/* Error state */}
+                  {usersError && (
+                    <tr>
+                      <td
+                        colSpan={7}
+                        className="px-4 sm:px-6 py-10 text-center text-rose-400 text-sm"
+                      >
+                        {usersError}
+                      </td>
+                    </tr>
+                  )}
 
-                {/* Pagination controls */}
-                <div className="mt-3 flex items-center justify-between text-xs text-slate-400">
-                  <span>
-                    Page {currentPage} of {totalPages}
-                  </span>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                      disabled={currentPage === 1}
-                      className={`px-3 py-1 rounded-lg border ${
-                        currentPage === 1
-                          ? "border-slate-700 text-slate-600 cursor-not-allowed"
-                          : "border-slate-600 hover:bg-slate-800"
-                      }`}
-                    >
-                      Previous
-                    </button>
-                    <button
-                      onClick={() =>
-                        setCurrentPage((p) => Math.min(totalPages, p + 1))
-                      }
-                      disabled={currentPage === totalPages}
-                      className={`px-3 py-1 rounded-lg border ${
-                        currentPage === totalPages
-                          ? "border-slate-700 text-slate-600 cursor-not-allowed"
-                          : "border-slate-600 hover:bg-slate-800"
-                      }`}
-                    >
-                      Next
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </section>
+                  {/* Loaded, but no users */}
+                  {users !== null && !usersError && users.length === 0 && (
+                    <tr>
+                      <td
+                        colSpan={7}
+                        className="px-4 sm:px-6 py-10 text-center text-slate-500 text-sm"
+                      >
+                        No users yet. Once mobile users sign in, they will
+                        appear here.
+                      </td>
+                    </tr>
+                  )}
 
-          {/* RIGHT COLUMN: Selected user detailed status + actions */}
-          <section className="bg-slate-900/80 rounded-3xl border border-slate-800 px-6 py-5 flex flex-col min-h-[480px]">
-            <h2 className="text-lg font-semibold mb-4">User Status</h2>
+                  {/* Normal data rows */}
+                  {users !== null &&
+                    !usersError &&
+                    users.length > 0 &&
+                    users.map((user) => {
+                      const inside = isInsideZone(user);
+                      const zoneAssigned = hasZone(user);
 
-            {selectedUser ? (
-              <>
-                {/* Avatar + username / ID */}
-                <div className="flex flex-col items-center mb-5">
-                  <div className="h-24 w-24 rounded-full bg-slate-800 flex items-center justify-center mb-3">
-                    <UserAvatarIcon size={44} />
-                  </div>
-                  <div className="text-center">
-                    <p className="text-lg font-semibold">
-                      {selectedUser.username}
-                    </p>
-                    <p className="text-xs text-slate-400 mt-0.5">
-                      User ID: #{selectedUser.id}
-                    </p>
-                  </div>
-                </div>
+                      return (
+                        <tr
+                          key={user.id}
+                          className="hover:bg-slate-900/70 transition-colors"
+                        >
+                          <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-slate-100 align-top">
+                            <div className="text-sm">
+                              {user.full_name || "—"}
+                            </div>
+                            <div className="mt-1 text-[11px] text-slate-500">
+                              Last seen: {formatDateTime(user.last_seen)}
+                            </div>
+                          </td>
 
-                {/* Detail fields (name, contact, zone, last status) */}
-                <div className="space-y-2 mb-6 text-sm">
-                  <div>
-                    <span className="font-semibold">Name</span>
-                    <p className="text-slate-300 text-sm">
-                      {selectedUser.username}
-                    </p>
-                  </div>
+                          <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-slate-100">
+                            {user.username}
+                          </td>
 
-                  <div>
-                    <span className="font-semibold">Contact Number</span>
-                    <p className="text-slate-400 text-sm">Not set in system</p>
-                  </div>
+                          <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-slate-200">
+                            {formatContact(user)}
+                          </td>
 
-                  <div>
-                    <span className="font-semibold">Assigned Zone</span>
-                    <p className="text-slate-300 text-sm">
-                      {selectedUserHasZone
-                        ? `Center: (${Number(
-                            selectedUser.zone_center_lat
-                          ).toFixed(4)}, ${Number(
-                            selectedUser.zone_center_lng
-                          ).toFixed(4)}) • Radius: ${Number(
-                            selectedUser.zone_radius_m
-                          )} m`
-                        : "No zone assigned"}
-                    </p>
-                  </div>
+                          {/* Assigned Zone */}
+                          <td className="px-4 sm:px-6 py-4">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedUserForZone(user)}
+                              className="btn-base bg-emerald-600 hover:bg-emerald-500 text-[11px] sm:text-xs font-semibold"
+                            >
+                              View / Update
+                            </button>
+                            {!zoneAssigned && (
+                              <div className="mt-1 text-[11px] text-slate-500">
+                                No zone assigned yet
+                              </div>
+                            )}
+                          </td>
 
-                  <div>
-                    <span className="font-semibold">Last Status</span>
-                    <p className="text-slate-300 text-sm">
-                      {selectedUserHasLocation ? (
-                        <>
-                          {selectedUserInside == null ? (
-                            "Location reported, zone status unknown"
-                          ) : selectedUserInside ? (
-                            <span className="text-emerald-400">
-                              Inside zone
-                            </span>
-                          ) : (
-                            <span className="text-red-400">Outside zone</span>
-                          )}{" "}
-                          •{" "}
-                          {selectedUser.last_seen
-                            ? new Date(
-                                selectedUser.last_seen
-                              ).toLocaleTimeString()
-                            : "-"}
-                        </>
-                      ) : (
-                        "No location data yet"
-                      )}
-                    </p>
-                  </div>
-                </div>
+                          {/* Status */}
+                          <td className="px-4 sm:px-6 py-4">
+                            {zoneAssigned ? (
+                              <div className="text-xs font-semibold">
+                                <span
+                                  className={
+                                    inside
+                                      ? "text-emerald-400"
+                                      : "text-slate-500"
+                                  }
+                                >
+                                  Inside
+                                </span>
+                                <span className="mx-0.5 text-slate-600">/</span>
+                                <span
+                                  className={
+                                    !inside ? "text-rose-400" : "text-slate-500"
+                                  }
+                                >
+                                  Outside
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-slate-500 italic">
+                                No zone
+                              </span>
+                            )}
+                          </td>
 
-                {/* Action buttons: Assign Zone / Track / Logs */}
-                <div className="space-y-3 mb-2">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      selectedUser && setMapUserId(selectedUser.id)
-                    }
-                    className="w-full rounded-full bg-emerald-600 hover:bg-emerald-500 py-2.5 text-sm font-semibold"
-                  >
-                    Assign Zone
-                  </button>
+                          {/* Track button */}
+                          <td className="px-4 sm:px-6 py-4 text-center">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedUserForTrack(user)}
+                              className="btn-base bg-red-700 hover:bg-red-600 text-[11px] sm:text-xs font-semibold"
+                            >
+                              Track
+                            </button>
+                          </td>
 
-                  <button
-                    type="button"
-                    disabled={!selectedUserHasLocation}
-                    onClick={() =>
-                      selectedUser && setTrackedUserId(selectedUser.id)
-                    }
-                    className={`w-full rounded-full py-2.5 text-sm font-semibold ${
-                      selectedUserHasLocation
-                        ? "bg-red-600 hover:bg-red-500"
-                        : "bg-red-900 text-slate-500 cursor-not-allowed"
-                    }`}
-                  >
-                    Track
-                  </button>
+                          {/* Logs buttons */}
+                          <td className="px-4 sm:px-6 py-4 text-center">
+                            <div className="flex items-center justify-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleViewLogs(user.id)}
+                                className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-[#a28f00] text-slate-900 text-base font-semibold hover:bg-[#c3aa03] transition-colors"
+                                title="View logs"
+                              >
+                                <FaEye />
+                              </button>
 
-                  <button
-                    type="button"
-                    onClick={() => handleOpenUserLogs(selectedUser.id)}
-                    className="w-full rounded-full bg-yellow-500 hover:bg-yellow-400 text-slate-900 py-2.5 text-sm font-semibold"
-                  >
-                    Logs
-                  </button>
-                </div>
-              </>
-            ) : (
-              // When no user is selected yet
-              <div className="flex-1 flex items-center justify-center text-sm text-slate-400">
-                Select a user on the left to view status.
-              </div>
-            )}
-          </section>
+                              <button
+                                type="button"
+                                onClick={() => handleDownloadUserLogs(user.id)}
+                                className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-[#a28f00] text-slate-900 text-base font-semibold hover:bg-[#c3aa03] transition-colors"
+                                title="Download CSV"
+                              >
+                                <FaDownload />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
-      </main>
+      </section>
 
-      {/* Map modal: create/update a zone for a user */}
-      {mapUser && (
+      {/* Zone modal */}
+      {selectedUserForZone && (
         <UserMapModal
-          user={mapUser}
-          onClose={() => setMapUserId(null)}
-          onSave={saveZone}
+          user={selectedUserForZone}
+          onClose={() => setSelectedUserForZone(null)}
+          onSave={(updated) => {
+            const updatedUser = updated as unknown as User;
+
+            if (updatedUser && typeof updatedUser.id === "number") {
+              setUsers((prev) =>
+                prev
+                  ? prev.map((u) => (u.id === updatedUser.id ? updatedUser : u))
+                  : prev
+              );
+            }
+
+            setSelectedUserForZone(null);
+          }}
         />
       )}
 
-      {/* Track modal: live tracking for a user */}
-      {trackedUser && (
+      {/* Track modal */}
+      {selectedUserForTrack && (
         <UserTrackModal
-          user={trackedUser}
-          onClose={() => setTrackedUserId(null)}
+          user={selectedUserForTrack}
+          onClose={() => setSelectedUserForTrack(null)}
         />
       )}
-    </div>
+    </main>
   );
-}
+};
+
+export default DashboardPage;

@@ -2,44 +2,19 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getDB } from "@/lib/db";
-import type { RowDataPacket, ResultSetHeader } from "mysql2";
 import bcrypt from "bcrypt";
 
 /**
  * Runtime configuration
- * ---------------------
- * Force this route to run on the **Node.js runtime**.
- *
- * Why this matters:
- * - The `mysql2` driver and `bcrypt` both depend on Node.js core modules
- *   (e.g. `crypto`, `net`, `tls`, etc.) which are **not** available in
- *   the Edge runtime.
- * - Using `nodejs` ensures DB access and password hashing work correctly.
  */
 export const runtime = "nodejs";
 
 /**
  * UserRow
  * -------
- * Shape of a row returned by the query that joins `users` with `user_locations`.
- *
- * Fields coming from `users`:
- *   - id:               Primary key in the `users` table.
- *   - username:         Unique username used by admin dashboard and app.
- *   - password_hash:    Hashed password (bcrypt) or legacy value.
- *   - role:             "admin" | "user".
- *   - zone_center_lat:  Latitude of the assigned geofence (nullable).
- *   - zone_center_lng:  Longitude of the assigned geofence (nullable).
- *   - zone_radius_m:    Radius of the assigned geofence in meters (nullable).
- *   - created_at:       Timestamp when the user row was created.
- *
- * Fields coming from `user_locations` (aliased in the SELECT):
- *   - last_latitude:    Latest known latitude (from user_locations.latitude).
- *   - last_longitude:   Latest known longitude (from user_locations.longitude).
- *   - inside_zone:      Latest zone state (1 = inside, 0 = outside, null = unknown).
- *   - last_seen:        Timestamp of the last location update (user_locations.updated_at).
+ * Shape of rows from `users` joined with `user_locations`.
  */
-interface UserRow extends RowDataPacket {
+interface UserRow {
   id: number;
   username: string;
   password_hash: string;
@@ -51,78 +26,19 @@ interface UserRow extends RowDataPacket {
 
   last_latitude: number | string | null;
   last_longitude: number | string | null;
-  inside_zone: number | null; // 1 / 0 / null
+  inside_zone: boolean | null; // boolean in Postgres
   last_seen: Date | null;
 }
-
-/**
- * MysqlError
- * ----------
- * Narrowed type for MySQL errors, exposing the `code` property.
- *
- * Example:
- *   - "ER_DUP_ENTRY" for duplicate key (e.g. username or email already exists).
- */
-type MysqlError = Error & { code?: string };
 
 /* ============================================================================
  * GET /api/users
  * ============================================================================
  */
-
-/**
- * GET /api/users
- * --------------
- * Purpose:
- *   Used by the **admin dashboard** to fetch the list of **non-admin** users
- *   together with their latest geolocation + zone status.
- *
- * Security model:
- *   - There is **no server-side authentication** in this route now
- *     (because `auth.ts` and middleware were removed).
- *   - Access is protected by:
- *       - UI logic (localStorage-based "adminAuth" flag),
- *       - and whatever network-level restrictions you put around this app.
- *   - If you ever deploy this externally, you should add proper auth again.
- *
- * Behavior:
- *   - Reads from:
- *       - `users` table
- *       - LEFT JOIN `user_locations` table for latest location info.
- *   - Filters out admin accounts:
- *       - `WHERE u.role <> 'admin'`
- *   - Sorts the list by `created_at` (newest users first).
- *
- * JSON response shape (example):
- *   [
- *     {
- *       "id": 1,
- *       "username": "john",
- *       "role": "user",
- *       "zone_center_lat": 34.1234 | null,
- *       "zone_center_lng": 35.5678 | null,
- *       "zone_radius_m": 150 | null,
- *       "created_at": "2025-01-01T10:00:00.000Z",
- *       "last_latitude": 34.1234 | null,
- *       "last_longitude": 35.5678 | null,
- *       "inside_zone": 1 | 0 | null,
- *       "last_seen": "2025-01-01T11:00:00.000Z" | null
- *     },
- *     ...
- *   ]
- */
 export async function GET() {
   try {
     const db = getDB();
 
-    // -----------------------------------------------------------------
-    // Query:
-    //   - Select all columns from `users` (u.*)
-    //   - Join `user_locations` to get latest known position & zone state
-    //   - Keep only non-admin users
-    //   - Order by creation time (newest first)
-    // -----------------------------------------------------------------
-    const [rows] = await db.query<UserRow[]>(
+    const result = await db.query<UserRow>(
       `
         SELECT 
           u.*,
@@ -137,13 +53,10 @@ export async function GET() {
       `
     );
 
-    // -----------------------------------------------------------------
-    // Normalize fields:
-    //   - Convert numeric-like fields to real numbers or null
-    //   - Return a clean JSON object that the dashboard can use directly
-    // -----------------------------------------------------------------
+    const rows = result.rows;
+
     return NextResponse.json(
-      rows.map((r) => ({
+      rows.map((r: UserRow) => ({
         id: r.id,
         username: r.username,
         role: r.role,
@@ -164,7 +77,6 @@ export async function GET() {
       }))
     );
   } catch (err) {
-    // Any unexpected error (DB failure, etc.) is logged for debugging
     console.error("GET /api/users error:", err);
 
     return NextResponse.json(
@@ -179,60 +91,8 @@ export async function GET() {
  * ============================================================================
  */
 
-/**
- * POST /api/users
- * ---------------
- * Purpose:
- *   Used by the **admin dashboard** "Create user" form to create
- *   **non-admin** users (role is forced to `"user"`).
- *
- * Request body (JSON):
- *   {
- *     "first_name": string,  // required
- *     "last_name": string,   // required
- *     "username": string,    // required, must be unique
- *     "email": string,       // required, must be unique
- *     "password": string     // required, will be hashed with bcrypt
- *   }
- *
- * Validation:
- *   - All fields must be present.
- *   - Minimal length checks:
- *       - first_name: >= 2 characters
- *       - last_name:  >= 2 characters
- *       - username:   >= 3 characters
- *       - password:   >= 4 characters
- *
- * Behavior:
- *   - Normalizes input:
- *       - trims whitespace on all string fields
- *       - lowercases the email address
- *   - Hashes the password using `bcrypt.hash(..., 12)`.
- *   - Inserts the user as `role = 'user'` (dashboard cannot create admins).
- *
- * On success (201-like behavior, but we use 200 OK):
- *   {
- *     "id": number,
- *     "first_name": string,
- *     "last_name": string,
- *     "username": string,
- *     "email": string,
- *     "role": "user"
- *   }
- *
- * On error:
- *   - Missing or invalid fields → 400 with a descriptive message.
- *   - Duplicate username or email:
- *       - MySQL error code "ER_DUP_ENTRY" is mapped to:
- *         { "message": "Username or email already exists" } (status 500).
- *   - Other DB errors:
- *       - { "message": "Error creating user" } (status 500).
- */
 export async function POST(req: NextRequest) {
   try {
-    // --------------------------------------------------------------
-    // 1) Parse and destructure request body
-    // --------------------------------------------------------------
     const { first_name, last_name, username, email, password } =
       (await req.json()) as {
         first_name?: string;
@@ -242,9 +102,6 @@ export async function POST(req: NextRequest) {
         password?: string;
       };
 
-    // --------------------------------------------------------------
-    // 2) Basic presence validation
-    // --------------------------------------------------------------
     if (!first_name || !last_name || !username || !email || !password) {
       return NextResponse.json(
         {
@@ -255,16 +112,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // --------------------------------------------------------------
-    // 3) Normalize and sanity-check values
-    // --------------------------------------------------------------
     const trimmedFirst = first_name.trim();
     const trimmedLast = last_name.trim();
     const trimmedUsername = username.trim();
     const trimmedEmail = email.trim().toLowerCase();
     const trimmedPassword = password.trim();
 
-    // Minimal length checks to avoid obviously bad input
     if (
       trimmedFirst.length < 2 ||
       trimmedLast.length < 2 ||
@@ -277,24 +130,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // --------------------------------------------------------------
-    // 4) Hash password (bcrypt, 12 rounds)
-    // --------------------------------------------------------------
-    //
-    // - 12 is a good balance between security and performance for
-    //   a small project or internal tool.
-    //
     const passwordHash = await bcrypt.hash(trimmedPassword, 12);
 
-    // --------------------------------------------------------------
-    // 5) Insert the new user as role = 'user'
-    // --------------------------------------------------------------
     const db = getDB();
-    const [result] = await db.query<ResultSetHeader>(
+
+    // PostgreSQL: use RETURNING to get new id
+    const result = await db.query<{ id: number }>(
       `
         INSERT INTO users 
           (first_name, last_name, username, email, password_hash, role)
-        VALUES (?, ?, ?, ?, ?, ?)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING id
       `,
       [
         trimmedFirst,
@@ -302,15 +148,14 @@ export async function POST(req: NextRequest) {
         trimmedUsername,
         trimmedEmail,
         passwordHash,
-        "user", // dashboard-created users are **always** non-admin
+        "user",
       ]
     );
 
-    // --------------------------------------------------------------
-    // 6) Return created user info (without password_hash)
-    // --------------------------------------------------------------
+    const newId = result.rows[0]?.id;
+
     return NextResponse.json({
-      id: result.insertId,
+      id: newId,
       first_name: trimmedFirst,
       last_name: trimmedLast,
       username: trimmedUsername,
@@ -320,11 +165,12 @@ export async function POST(req: NextRequest) {
   } catch (err: unknown) {
     console.error("POST /api/users error:", err);
 
-    const code = (err as MysqlError).code;
+    // Narrow error type to something with optional `code`
+    const pgErr = err as { code?: string };
 
-    // Specific handling for unique constraints (username/email)
+    // Postgres unique violation
     const message =
-      code === "ER_DUP_ENTRY"
+      pgErr.code === "23505"
         ? "Username or email already exists"
         : "Error creating user";
 
