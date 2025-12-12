@@ -1,171 +1,217 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap");
 @import "tailwindcss";
 
 /* ─────────────────────────────────────────────
-   Design tokens – shared (non-theme) part
-   ───────────────────────────────────────────── */
-:root {
-  /* ---------- Radii ---------- */
-  --radius-xs: 0.375rem;
-  --radius-sm: 0.5rem;
-  --radius-md: 0.75rem;
-  --radius-lg: 1rem;
-  --radius-xl: 1.5rem;
-  --radius-2xl: 1.75rem;
-
-  /* ---------- Shadows ---------- */
-  --shadow-soft: 0 18px 45px rgba(15, 23, 42, 0.55);
-  --shadow-strong: 0 24px 60px rgba(15, 23, 42, 0.85);
-
-  /* ---------- Focus ring ---------- */
-  --focus-ring:
-    0 0 0 1px rgba(148, 163, 184, 0.9),
-    0 0 0 4px rgba(79, 70, 229, 0.4);
-}
-
-/* ─────────────────────────────────────────────
-   DARK THEME – clean, deep navy dashboard
-   Applied when <html data-theme="dark">
-   ───────────────────────────────────────────── */
-:root[data-theme="dark"] {
-  color-scheme: dark;
-
-  /* Layers */
-  --background: #020617;
-  /* slate-950 */
-  --foreground: #e5e7eb;
-  /* slate-200 */
-
-  --surface-root: #020617;
-  /* app shell */
-  --surface: #020617;
-  /* main cards / panels */
-  --surface-soft: #020617;
-  /* softer surfaces (rows, dropdowns) */
-  --surface-elevated: #020617;
-  /* modals / elevated cards */
-
-  /* Borders & text */
-  --border-subtle: rgba(148, 163, 184, 0.3);
-  --border-strong: rgba(129, 140, 248, 0.7);
-
-  --muted-foreground: #9ca3af;
-  --soft-foreground: #64748b;
-
-  /* Accent */
-  --accent: #6366f1;
-  /* indigo-500 */
-  --accent-soft: rgba(99, 102, 241, 0.18);
-  --accent-ring: rgba(129, 140, 248, 0.7);
-
-  /* Tonal containers (Material-ish) */
-  --success-container: rgba(22, 163, 74, 0.18);
-  --on-success-container: #bbf7d0;
-
-  --danger-container: rgba(239, 68, 68, 0.2);
-  --on-danger-container: #fee2e2;
-
-  --warning-container: rgba(234, 179, 8, 0.2);
-  --on-warning-container: #fef9c3;
-
-  /* Icon/small badge colors */
-  --success: #22c55e;
-  --danger: #ef4444;
-  --warning: #eab308;
-}
-
-/* ─────────────────────────────────────────────
-   LIGHT THEME – soft gray + white cards
-   Applied when <html data-theme="light">
-   ───────────────────────────────────────────── */
-:root[data-theme="light"] {
-  color-scheme: light;
-
-  /* Layers */
-  --background: #f3f4f6;
-  /* slate-100 */
-  --foreground: #020617;
-  /* almost-black */
-
-  --surface-root: #f3f4f6;
-  --surface: #ffffff;
-  /* main cards */
-  --surface-soft: #f9fafb;
-  /* subtle panels / rows */
-  --surface-elevated: #ffffff;
-  /* modals / elevated cards */
-
-  /* Borders & text */
-  --border-subtle: rgba(148, 163, 184, 0.4);
-  --border-strong: rgba(79, 70, 229, 0.7);
-
-  --muted-foreground: #4b5563;
-  /* slate-600 */
-  --soft-foreground: #9ca3af;
-
-  /* Accent */
-  --accent: #4f46e5;
-  --accent-soft: rgba(79, 70, 229, 0.08);
-  --accent-ring: rgba(79, 70, 229, 0.55);
-
-  /* Tonal containers */
-  --success-container: #ecfdf3;
-  --on-success-container: #166534;
-
-  --danger-container: #fef2f2;
-  --on-danger-container: #b91c1c;
-
-  --warning-container: #fffbeb;
-  --on-warning-container: #92400e;
-
-  /* Icon/small badge colors */
-  --success: #16a34a;
-  --danger: #dc2626;
-  --warning: #d97706;
-}
-
-/* ─────────────────────────────────────────────
-   Base styles – layout, typography, selection
+   BASE TOKENS – LIGHT & DARK THEMES
    ───────────────────────────────────────────── */
 @layer base {
+
+  :root,
+  :root[data-theme="light"],
+  .light {
+    /* Shadcn-style HSL tokens */
+    --background: 40 33% 98%;
+    --foreground: 200 25% 15%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 200 25% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 200 25% 15%;
+
+    /* Teal / ocean blue primary */
+    --primary: 185 60% 40%;
+    --primary-foreground: 0 0% 100%;
+    --primary-soft: 185 50% 95%;
+
+    /* Warm gray secondary */
+    --secondary: 200 10% 94%;
+    --secondary-foreground: 200 25% 25%;
+
+    /* Muted tones */
+    --muted: 200 10% 92%;
+    --muted-foreground: 200 15% 45%;
+
+    /* Coral accent */
+    --accent: 12 80% 60%;
+    --accent-foreground: 0 0% 100%;
+    --accent-soft: 12 70% 95%;
+
+    /* Success / destructive */
+    --success: 158 60% 42%;
+    --success-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 200 15% 88%;
+    --input: 200 15% 88%;
+    --ring: 185 60% 40%;
+
+    --radius: 0.75rem;
+
+    /* Sidebar tokens */
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 200 25% 25%;
+    --sidebar-primary: 185 60% 40%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 200 10% 94%;
+    --sidebar-accent-foreground: 200 25% 25%;
+    --sidebar-border: 200 15% 88%;
+    --sidebar-ring: 185 60% 40%;
+
+    /* Dashboard surfaces */
+    --surface-root: hsl(var(--background));
+    --surface: hsl(var(--card));
+    --surface-soft: hsl(200 10% 96%);
+    --surface-elevated: hsl(var(--card));
+
+    /* Status containers – light */
+    --success-container: hsl(142 76% 97%);
+    --on-success-container: hsl(142 40% 30%);
+    --danger-container: hsl(0 84% 97%);
+    --on-danger-container: hsl(0 72% 40%);
+    --warning-container: hsl(45 100% 96%);
+    --on-warning-container: hsl(33 77% 37%);
+
+    /* Old dashboard radii */
+    --radius-xs: 0.375rem;
+    --radius-sm: 0.5rem;
+    --radius-md: 0.75rem;
+    --radius-lg: 1rem;
+    --radius-xl: 1.5rem;
+    --radius-2xl: 1.75rem;
+
+    /* Shadows */
+    --shadow-soft: 0 2px 8px -2px hsl(200 25% 15% / 0.08),
+      0 4px 16px -4px hsl(200 25% 15% / 0.06);
+    --shadow-card: 0 4px 20px -4px hsl(200 25% 15% / 0.1),
+      0 8px 32px -8px hsl(200 25% 15% / 0.08);
+    --shadow-elevated: 0 8px 40px -8px hsl(200 25% 15% / 0.15),
+      0 16px 64px -16px hsl(200 25% 15% / 0.1);
+
+    /* Gradients */
+    --gradient-hero: linear-gradient(135deg,
+        hsl(185 60% 40% / 0.05) 0%,
+        hsl(12 80% 60% / 0.03) 100%);
+    --gradient-card: linear-gradient(180deg,
+        hsl(0 0% 100%) 0%,
+        hsl(200 10% 98%) 100%);
+    --gradient-accent: linear-gradient(135deg,
+        hsl(var(--accent)) 0%,
+        hsl(20 75% 55%) 100%);
+    --gradient-primary: linear-gradient(135deg,
+        hsl(var(--primary)) 0%,
+        hsl(190 55% 45%) 100%);
+
+    --focus-ring: 0 0 0 1px hsl(var(--ring)),
+      0 0 0 4px hsl(185 60% 40% / 0.18);
+  }
+
+  :root[data-theme="dark"],
+  .dark {
+    --background: 200 25% 8%;
+    --foreground: 40 20% 95%;
+
+    --card: 200 20% 12%;
+    --card-foreground: 40 20% 95%;
+
+    --popover: 200 20% 12%;
+    --popover-foreground: 40 20% 95%;
+
+    --primary: 185 55% 50%;
+    --primary-foreground: 200 25% 8%;
+    --primary-soft: 185 40% 15%;
+
+    --secondary: 200 15% 18%;
+    --secondary-foreground: 40 15% 85%;
+
+    --muted: 200 15% 20%;
+    --muted-foreground: 200 10% 60%;
+
+    --accent: 12 70% 55%;
+    --accent-foreground: 0 0% 100%;
+    --accent-soft: 12 50% 15%;
+
+    --success: 158 50% 45%;
+    --success-foreground: 0 0% 100%;
+
+    --destructive: 0 65% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 200 15% 22%;
+    --input: 200 15% 22%;
+    --ring: 185 55% 50%;
+
+    --shadow-soft: 0 2px 8px -2px hsl(0 0% 0% / 0.3),
+      0 4px 16px -4px hsl(0 0% 0% / 0.2);
+    --shadow-card: 0 4px 20px -4px hsl(0 0% 0% / 0.4),
+      0 8px 32px -8px hsl(0 0% 0% / 0.3);
+    --shadow-elevated: 0 8px 40px -8px hsl(0 0% 0% / 0.5),
+      0 16px 64px -16px hsl(0 0% 0% / 0.4);
+
+    --gradient-hero: linear-gradient(135deg,
+        hsl(185 55% 50% / 0.08) 0%,
+        hsl(12 70% 55% / 0.05) 100%);
+    --gradient-card: linear-gradient(180deg,
+        hsl(200 20% 12%) 0%,
+        hsl(200 20% 10%) 100%);
+
+    --sidebar-background: 200 25% 10%;
+    --sidebar-foreground: 40 15% 85%;
+    --sidebar-primary: 185 55% 50%;
+    --sidebar-primary-foreground: 200 25% 8%;
+    --sidebar-accent: 200 15% 18%;
+    --sidebar-accent-foreground: 40 15% 85%;
+    --sidebar-border: 200 15% 22%;
+    --sidebar-ring: 185 55% 50%;
+
+    --surface-root: hsl(200 25% 8%);
+    --surface: hsl(200 20% 12%);
+    --surface-soft: hsl(200 20% 16%);
+    --surface-elevated: hsl(200 20% 18%);
+
+    --success-container: hsl(142 36% 16%);
+    --on-success-container: hsl(142 77% 88%);
+    --danger-container: hsl(0 62% 18%);
+    --on-danger-container: hsl(0 86% 90%);
+    --warning-container: hsl(33 45% 18%);
+    --on-warning-container: hsl(45 93% 88%);
+
+    --focus-ring: 0 0 0 1px hsl(var(--ring)),
+      0 0 0 4px hsl(185 55% 50% / 0.3);
+  }
 
   *,
   *::before,
   *::after {
     box-sizing: border-box;
+    border-color: hsl(var(--border));
   }
 
   html,
   body {
-    padding: 0;
     margin: 0;
+    padding: 0;
   }
 
   body {
-    margin: 0;
-    background-color: var(--background);
-    color: var(--foreground);
-
-    /* Use Geist from layout.tsx when available */
-    font-family: var(--font-geist-sans, system-ui, -apple-system,
-        BlinkMacSystemFont, "Segoe UI", sans-serif);
-
+    min-height: 100vh;
+    background-color: var(--surface-root);
+    color: hsl(var(--foreground));
+    font-family: "DM Sans", system-ui, -apple-system, BlinkMacSystemFont,
+      "Segoe UI", sans-serif;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
     line-height: 1.5;
   }
 
-  code,
-  pre {
-    font-family: var(--font-geist-mono, ui-monospace, SFMono-Regular, Menlo,
-        Monaco, Consolas, "Liberation Mono", "Courier New", monospace);
-  }
-
   ::selection {
-    background: color-mix(in srgb, var(--accent) 40%, transparent);
-    color: #f9fafb;
+    background: hsl(185 60% 40% / 0.18);
+    color: white;
   }
 
-  /* Scrollbar (WebKit) */
+  /* Scrollbar */
   ::-webkit-scrollbar {
     width: 8px;
     height: 8px;
@@ -176,19 +222,21 @@
   }
 
   ::-webkit-scrollbar-thumb {
-    background: color-mix(in srgb, var(--muted-foreground) 45%, transparent);
+    background: hsl(200 10% 70% / 0.6);
     border-radius: 999px;
   }
 
   h1,
   h2,
   h3,
-  h4 {
+  h4,
+  h5,
+  h6 {
     letter-spacing: -0.03em;
   }
 
   a {
-    color: var(--accent);
+    color: hsl(var(--primary));
     text-decoration: none;
   }
 
@@ -198,20 +246,51 @@
 }
 
 /* ─────────────────────────────────────────────
-   Component primitives
+   COMPONENT PRIMITIVES – CARDS, BUTTONS, INPUTS
    ───────────────────────────────────────────── */
 @layer components {
+  .container-clinic {
+    width: 100%;
+    max-width: 80rem;
+    margin-left: auto;
+    margin-right: auto;
+    padding-inline: 1rem;
+  }
+
+  @media (min-width: 640px) {
+    .container-clinic {
+      padding-inline: 1.5rem;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .container-clinic {
+      padding-inline: 2rem;
+    }
+  }
+
+  .section-padding {
+    padding-block: 4rem;
+  }
+
+  @media (min-width: 768px) {
+    .section-padding {
+      padding-block: 6rem;
+    }
+  }
+
   .card {
-    background: color-mix(in srgb, var(--surface) 94%, #020617 6%);
+    background: var(--gradient-card);
     border-radius: var(--radius-2xl);
-    border: 1px solid var(--border-subtle);
-    box-shadow: var(--shadow-soft);
+    border: 1px solid hsl(var(--border));
+    box-shadow: var(--shadow-card);
   }
 
   .card-soft {
-    background: color-mix(in srgb, var(--surface-soft) 96%, transparent);
+    background-color: hsl(var(--card));
     border-radius: var(--radius-xl);
-    border: 1px solid color-mix(in srgb, var(--border-subtle) 80%, transparent);
+    border: 1px solid hsl(var(--border));
+    box-shadow: var(--shadow-soft);
   }
 
   .btn-base {
@@ -240,25 +319,26 @@
   }
 
   .btn-primary {
-    background-color: var(--accent);
-    color: #e5e7eb;
-    border-color: color-mix(in srgb, var(--accent) 70%, transparent);
-    box-shadow: 0 10px 25px color-mix(in srgb, var(--accent) 40%, transparent);
+    background-image: var(--gradient-primary);
+    color: hsl(var(--primary-foreground));
+    border-color: hsl(var(--primary));
+    box-shadow: 0 10px 25px hsl(185 60% 40% / 0.25);
   }
 
   .btn-primary:hover {
-    background-color: color-mix(in srgb, var(--accent) 90%, black 8%);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-elevated);
   }
 
   .btn-ghost {
     background-color: transparent;
-    color: var(--muted-foreground);
-    border-color: color-mix(in srgb, var(--border-subtle) 40%, transparent);
+    color: hsl(var(--muted-foreground));
+    border-color: hsl(var(--border));
   }
 
   .btn-ghost:hover {
-    background-color: color-mix(in srgb, var(--surface-soft) 60%, transparent);
-    color: var(--foreground);
+    background-color: hsl(var(--muted) / 1);
+    color: hsl(var(--foreground));
   }
 
   .pill {
@@ -270,9 +350,9 @@
     border-radius: 999px;
     font-size: 0.7rem;
     font-weight: 500;
-    border: 1px solid color-mix(in srgb, var(--border-subtle) 80%, transparent);
-    color: var(--soft-foreground);
-    background: color-mix(in srgb, var(--surface-soft) 85%, transparent);
+    border: 1px solid hsl(var(--border));
+    color: hsl(var(--muted-foreground));
+    background-color: hsl(var(--muted));
   }
 
   .input-shell {
@@ -282,8 +362,8 @@
     padding-inline: 0.8rem;
     padding-block: 0.5rem;
     border-radius: var(--radius-lg);
-    border: 1px solid color-mix(in srgb, var(--border-subtle) 90%, transparent);
-    background: color-mix(in srgb, var(--surface) 97%, transparent);
+    border: 1px solid hsl(var(--border));
+    background-color: hsl(var(--card));
   }
 
   .input-shell input {
@@ -292,11 +372,11 @@
     border: none;
     outline: none;
     font-size: 0.9rem;
-    color: var(--foreground);
+    color: hsl(var(--foreground));
   }
 
   .input-shell input::placeholder {
-    color: var(--soft-foreground);
+    color: hsl(var(--muted-foreground));
   }
 
   .badge-dot {
@@ -312,133 +392,147 @@
     width: 6px;
     height: 6px;
     border-radius: 999px;
-    background-color: var(--success);
+    background-color: hsl(var(--success));
     transform: translateY(-50%);
   }
+
+  .text-gradient {
+    background-image: var(--gradient-primary);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .btn-gradient {
+    background-image: var(--gradient-accent);
+    color: hsl(var(--accent-foreground));
+    font-weight: 500;
+  }
+
+  .hover-lift {
+    transition: transform 0.3s ease-out, box-shadow 0.3s ease-out;
+  }
+
+  .hover-lift:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-elevated);
+  }
+
+  .focus-ring {
+    outline: none;
+  }
+
+  .focus-ring:focus-visible {
+    box-shadow: var(--focus-ring);
+  }
+
+  @media (max-width: 640px) {
+
+    .card,
+    .card-soft {
+      border-radius: var(--radius-lg);
+    }
+
+    .btn-base {
+      width: 100%;
+      padding-inline: 0.9rem;
+    }
+
+    .input-shell {
+      padding-inline: 0.7rem;
+      padding-block: 0.45rem;
+    }
+  }
 }
 
 /* ─────────────────────────────────────────────
-   Tailwind bindings – map slate utilities to tokens
+   UTILITIES – ANIMATIONS & MAPPINGS
    ───────────────────────────────────────────── */
+@layer utilities {
 
-/* Main background surfaces */
-body .bg-slate-950,
-body .bg-slate-950\/80 {
-  background-color: var(--surface-root) !important;
-}
-
-body .bg-slate-900,
-body .bg-slate-900\/80 {
-  background-color: var(--surface) !important;
-}
-
-body .bg-slate-900\/60,
-body .bg-slate-900\/70 {
-  background-color: var(--surface-soft) !important;
-}
-
-/* FIX: row hover state – keep text visible in light & dark */
-body .hover\:bg-slate-900\/70:hover,
-body .hover\:bg-slate-900\/60:hover {
-  background-color: color-mix(in srgb, var(--surface-soft) 94%, #020617 6%) !important;
-}
-
-/* Borders */
-body .border-slate-800,
-body .border-slate-700 {
-  border-color: var(--border-subtle) !important;
-}
-
-/* Text colors – remap slate palette to theme tokens */
-body .text-slate-950,
-body .text-slate-900,
-body .text-slate-800,
-body .text-slate-700,
-body .text-slate-50,
-body .text-slate-100,
-body .text-slate-200,
-body .text-white {
-  /* Strong / primary text */
-  color: var(--foreground) !important;
-}
-
-body .text-slate-600,
-body .text-slate-500 {
-  /* Secondary / muted text */
-  color: var(--muted-foreground) !important;
-}
-
-body .text-slate-400,
-body .text-slate-300 {
-  /* Soft / tertiary text */
-  color: var(--soft-foreground) !important;
-}
-
-/* Rounded pills */
-body .rounded-3xl,
-body .rounded-2xl,
-body .rounded-full {
-  border-radius: var(--radius-2xl) !important;
-}
-
-/* Primary / accent buttons */
-body .bg-accent,
-body .hover\:bg-accent\/90:hover,
-body .bg-blue-600,
-body .hover\:bg-blue-500:hover {
-  background-color: var(--accent) !important;
-  color: #e5e7eb !important;
-}
-
-/* Assign Zone → success container tonal button */
-body .bg-emerald-600,
-body .hover\:bg-emerald-500:hover {
-  background-color: var(--success-container) !important;
-  color: var(--on-success-container) !important;
-}
-
-/* Track → danger container tonal button */
-body .bg-red-600,
-body .bg-red-700,
-body .hover\:bg-red-500:hover,
-body .hover\:bg-red-600:hover {
-  background-color: var(--danger-container) !important;
-  color: var(--on-danger-container) !important;
-}
-
-/* Logs → warning container tonal button */
-body .bg-yellow-500,
-body .hover\:bg-yellow-400:hover,
-body .bg-\[\#a28f00\],
-body .hover\:bg-\[\#c3aa03\]:hover {
-  background-color: var(--warning-container) !important;
-  color: var(--on-warning-container) !important;
-}
-
-/* ─────────────────────────────────────────────
-   Mobile responsiveness helpers
-   ───────────────────────────────────────────── */
-@media (max-width: 640px) {
-  body {
-    font-size: 0.95rem;
+  /* Animations */
+  .animate-fade-up {
+    animation: fadeUp 0.6s ease-out forwards;
   }
 
-  .card,
-  .card-soft {
-    border-radius: var(--radius-lg);
-    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.65);
+  .animate-fade-in {
+    animation: fadeIn 0.5s ease-out forwards;
   }
 
-  .btn-base {
-    width: 100%;
-    padding-inline: 0.9rem;
+  .animate-scale-in {
+    animation: scaleIn 0.4s ease-out forwards;
   }
 
-  .input-shell {
-    padding-inline: 0.7rem;
-    padding-block: 0.45rem;
+  .animate-slide-in-right {
+    animation: slideInRight 0.5s ease-out forwards;
   }
 
+  @keyframes fadeUp {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes scaleIn {
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes slideInRight {
+    from {
+      opacity: 0;
+      transform: translateX(20px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  .delay-100 {
+    animation-delay: 100ms;
+  }
+
+  .delay-200 {
+    animation-delay: 200ms;
+  }
+
+  .delay-300 {
+    animation-delay: 300ms;
+  }
+
+  .delay-400 {
+    animation-delay: 400ms;
+  }
+
+  .delay-500 {
+    animation-delay: 500ms;
+  }
+
+  /* Scroll helpers */
   .scroll-x {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
@@ -451,5 +545,92 @@ body .hover\:bg-\[\#c3aa03\]:hover {
 
   .hide-scrollbar::-webkit-scrollbar {
     display: none;
+  }
+
+  /* ──────────────────────────
+     BACKGROUND MAPPINGS
+     ────────────────────────── */
+
+  body .bg-slate-950,
+  body .bg-slate-950\/80 {
+    background-color: var(--surface-root) !important;
+  }
+
+  body .bg-slate-900,
+  body .bg-slate-900\/80 {
+    background-color: var(--surface) !important;
+  }
+
+  body .bg-slate-900\/70,
+  body .bg-slate-900\/60 {
+    background-color: var(--surface-soft) !important;
+  }
+
+  /* ──────────────────────────
+     TEXT COLOR MAPPINGS
+     (fix disappearing text in light mode)
+     ────────────────────────── */
+
+  /* Strong / primary text – always high contrast */
+  body .text-slate-900,
+  body .text-slate-800,
+  body .text-slate-700,
+  body .text-slate-600,
+  body .text-slate-50,
+  body .text-slate-100,
+  body .text-slate-200 {
+    color: hsl(var(--foreground)) !important;
+  }
+
+  /* Muted / secondary text */
+  body .text-slate-500,
+  body .text-slate-400,
+  body .text-slate-300 {
+    color: hsl(var(--muted-foreground)) !important;
+  }
+
+  /* ──────────────────────────
+     BUTTON / STATUS MAPPINGS
+     ────────────────────────── */
+
+  body .bg-accent,
+  body .hover\:bg-accent\/90:hover,
+  body .bg-blue-600,
+  body .hover\:bg-blue-500:hover {
+    background-image: var(--gradient-primary) !important;
+    color: hsl(var(--primary-foreground)) !important;
+  }
+
+  body .bg-emerald-600,
+  body .hover\:bg-emerald-500:hover {
+    background-color: var(--success-container) !important;
+    color: var(--on-success-container) !important;
+  }
+
+  body .bg-red-600,
+  body .bg-red-700,
+  body .hover\:bg-red-500:hover,
+  body .hover\:bg-red-600:hover {
+    background-color: var(--danger-container) !important;
+    color: var(--on-danger-container) !important;
+  }
+
+  body .bg-yellow-500,
+  body .hover\:bg-yellow-400:hover,
+  body .bg-\[\#a28f00\],
+  body .hover\:bg-\[\#c3aa03\]:hover {
+    background-color: var(--warning-container) !important;
+    color: var(--on-warning-container) !important;
+  }
+
+  /* ──────────────────────────
+     TABLE ROW HOVER – DISABLE
+     (keep hover only on buttons)
+     ────────────────────────── */
+
+  body .hover\:bg-slate-900\/70:hover,
+  body .hover\:bg-slate-900\/60:hover,
+  body .hover\:bg-slate-900\/80:hover {
+    background-color: inherit !important;
   }
 }
