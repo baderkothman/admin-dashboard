@@ -9,6 +9,12 @@ interface UserRow {
   id: number;
   username: string;
   role: "admin" | "user";
+
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+  phone: string | null;
+
   zone_center_lat: number | null;
   zone_center_lng: number | null;
   zone_radius_m: number | null;
@@ -35,6 +41,10 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
           id,
           username,
           role,
+          first_name,
+          last_name,
+          email,
+          phone,
           zone_center_lat,
           zone_center_lng,
           zone_radius_m
@@ -50,11 +60,22 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
     }
 
     const u = result.rows[0];
+    const fullName = [u.first_name, u.last_name]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
 
     return NextResponse.json({
       id: u.id,
       username: u.username,
       role: u.role,
+
+      first_name: u.first_name,
+      last_name: u.last_name,
+      full_name: fullName || null,
+      email: u.email,
+      phone: u.phone ?? null,
+
       zone_center_lat:
         u.zone_center_lat !== null ? Number(u.zone_center_lat) : null,
       zone_center_lng:
@@ -70,9 +91,8 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
   }
 }
 
-/* ─────────────────────────────────────────────
- * PUT /api/users/[id]
- * ──────────────────────────────────────────── */
+/* PUT and DELETE unchanged except for types, no need to touch them
+   unless you want to add more updatable fields. */
 export async function PUT(req: NextRequest, { params }: RouteParams) {
   try {
     const body = (await req.json()) as {
@@ -132,9 +152,6 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
   }
 }
 
-/* ─────────────────────────────────────────────
- * DELETE /api/users/[id]
- * ──────────────────────────────────────────── */
 export async function DELETE(_req: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params;
