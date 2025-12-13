@@ -1,19 +1,30 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
-import { FaBell, FaEye, FaDownload, FaCircle } from "react-icons/fa";
+import {
+  FaBell,
+  FaEye,
+  FaDownload,
+  FaCircle,
+  FaSort,
+  FaSortUp,
+  FaSortDown,
+} from "react-icons/fa";
 import ThemeToggle from "@/components/ThemeToggle";
 
-// Load the Leaflet-based modals only on the client
+// Leaflet-based modals (client-only)
 const UserMapModal = dynamic(() => import("@/components/UserMapModal"), {
   ssr: false,
 });
-
 const UserTrackModal = dynamic(() => import("@/components/UserTrackModal"), {
   ssr: false,
 });
+
+/* ─────────────────────────────────────────────
+ * Types
+ * ───────────────────────────────────────────── */
 
 type User = {
   id: number;
@@ -29,6 +40,7 @@ type User = {
   last_seen: string | null;
   last_latitude: number | null;
   last_longitude: number | null;
+  created_at?: string | null;
 };
 
 type Alert = {
@@ -41,11 +53,96 @@ type Alert = {
   longitude?: number | null;
 };
 
+type SortKey = "full_name" | "username" | "contact" | "zone" | "status";
+type SortDirection = "asc" | "desc";
+
+/* ─────────────────────────────────────────────
+ * Pure helpers
+ * ───────────────────────────────────────────── */
+
+function hasZone(u: User): boolean {
+  return (
+    u.zone_center_lat !== null &&
+    u.zone_center_lng !== null &&
+    u.zone_radius_m !== null
+  );
+}
+
+function isInsideZone(u: User): boolean {
+  return u.inside_zone === true || u.inside_zone === 1 || u.inside_zone === "1";
+}
+
+function formatContact(u: User): string {
+  if (u.phone) return u.phone;
+  if (u.email) return u.email;
+  return "—";
+}
+
+function formatDateTime(iso: string | null): string {
+  if (!iso) return "Never";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "Never";
+  return d.toLocaleString();
+}
+
+/* ─────────────────────────────────────────────
+ * Sortable header component
+ * ───────────────────────────────────────────── */
+
+interface SortableHeaderProps {
+  label: string;
+  column: SortKey;
+  activeKey: SortKey;
+  direction: SortDirection;
+  onSort: (key: SortKey) => void;
+  align?: "left" | "center";
+}
+
+function SortableHeader({
+  label,
+  column,
+  activeKey,
+  direction,
+  onSort,
+  align = "left",
+}: SortableHeaderProps) {
+  const isActive = activeKey === column;
+
+  return (
+    <button
+      type="button"
+      onClick={() => onSort(column)}
+      className={`group inline-flex items-center gap-1 text-[11px] sm:text-xs font-medium uppercase tracking-wide ${
+        align === "center" ? "justify-center w-full" : ""
+      }`}
+    >
+      <span>{label}</span>
+      <span className="text-[10px] text-slate-500 group-hover:text-slate-300">
+        {isActive ? (
+          direction === "asc" ? (
+            <FaSortUp />
+          ) : (
+            <FaSortDown />
+          )
+        ) : (
+          <FaSort className="opacity-60" />
+        )}
+      </span>
+    </button>
+  );
+}
+
+/* ─────────────────────────────────────────────
+ * Main dashboard component
+ * ───────────────────────────────────────────── */
+
+const PAGE_SIZE = 15;
+
 const DashboardPage: React.FC = () => {
   const router = useRouter();
 
-  // null = not yet loaded; [] = loaded but no users
-  const [users, setUsers] = useState<User[] | null>(null);
+  // Data
+  const [users, setUsers] = useState<User[] | null>(null); // null = loading
   const [usersError, setUsersError] = useState<string | null>(null);
 
   const [selectedUserForZone, setSelectedUserForZone] = useState<User | null>(
@@ -58,21 +155,28 @@ const DashboardPage: React.FC = () => {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [alertsOpen, setAlertsOpen] = useState(false);
 
-  // ─────────────────────────────────────────────
-  // Auth guard
-  // ─────────────────────────────────────────────
+  // Sorting
+  const [sortKey, setSortKey] = useState<SortKey>("full_name");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  // 👉 if you prefer descending by default, change to: useState<SortDirection>("desc")
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+
+  /* ─────────────────────────────────────────────
+   * Auth guard
+   * ───────────────────────────────────────────── */
   useEffect(() => {
     if (typeof window === "undefined") return;
-
     const isAuthed = localStorage.getItem("adminAuth") === "true";
     if (!isAuthed) {
       router.replace("/");
     }
   }, [router]);
 
-  // ─────────────────────────────────────────────
-  // Load users (near real-time refresh)
-  // ─────────────────────────────────────────────
+  /* ─────────────────────────────────────────────
+   * Load users (polling)
+   * ───────────────────────────────────────────── */
   useEffect(() => {
     const fetchUsers = async () => {
       try {
@@ -86,12 +190,9 @@ const DashboardPage: React.FC = () => {
 
         setUsers((prev) => {
           if (prev === null) return nonAdmins;
-
           const prevStr = JSON.stringify(prev);
           const nextStr = JSON.stringify(nonAdmins);
-          if (prevStr === nextStr) {
-            return prev;
-          }
+          if (prevStr === nextStr) return prev;
           return nonAdmins;
         });
 
@@ -114,19 +215,17 @@ const DashboardPage: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Keep tracking modal synced with latest users list
+  // Keep tracking modal user in sync with updated list
   useEffect(() => {
     if (!selectedUserForTrack || users === null) return;
-
     const updated = users.find((u) => u.id === selectedUserForTrack.id);
     if (!updated || updated === selectedUserForTrack) return;
-
     setSelectedUserForTrack(updated);
   }, [users, selectedUserForTrack]);
 
-  // ─────────────────────────────────────────────
-  // Load alerts (near real-time)
-  // ─────────────────────────────────────────────
+  /* ─────────────────────────────────────────────
+   * Load alerts
+   * ───────────────────────────────────────────── */
   useEffect(() => {
     const fetchAlerts = async () => {
       try {
@@ -165,9 +264,94 @@ const DashboardPage: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // ─────────────────────────────────────────────
-  // Helpers
-  // ─────────────────────────────────────────────
+  /* ─────────────────────────────────────────────
+   * Sorting + pagination derived data
+   * ───────────────────────────────────────────── */
+
+  const sortedUsers = useMemo(() => {
+    if (!users) return null;
+
+    const list = [...users];
+
+    list.sort((a, b) => {
+      let result = 0;
+
+      switch (sortKey) {
+        case "full_name": {
+          const nameA = (a.full_name || a.username || "").toLowerCase();
+          const nameB = (b.full_name || b.username || "").toLowerCase();
+          result = nameA.localeCompare(nameB);
+          break;
+        }
+
+        case "username": {
+          const ua = (a.username || "").toLowerCase();
+          const ub = (b.username || "").toLowerCase();
+          result = ua.localeCompare(ub);
+          break;
+        }
+
+        case "contact": {
+          const contactA = formatContact(a).toLowerCase();
+          const contactB = formatContact(b).toLowerCase();
+          result = contactA.localeCompare(contactB);
+          break;
+        }
+
+        case "zone": {
+          const za = hasZone(a) ? 1 : 0;
+          const zb = hasZone(b) ? 1 : 0;
+          result = za - zb;
+          break;
+        }
+
+        case "status": {
+          const sa = isInsideZone(a) ? 1 : 0;
+          const sb = isInsideZone(b) ? 1 : 0;
+          result = sa - sb;
+          break;
+        }
+
+        default:
+          result = 0;
+      }
+
+      if (result === 0) {
+        // tie-breaker: created_at (newer last in asc, newer first in desc)
+        const createdA = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const createdB = b.created_at ? new Date(b.created_at).getTime() : 0;
+        result = createdA - createdB;
+      }
+
+      return sortDirection === "asc" ? result : -result;
+    });
+
+    return list;
+  }, [users, sortKey, sortDirection]);
+
+  // Keep current page in range when list changes
+  useEffect(() => {
+    if (!sortedUsers) return;
+    const total = sortedUsers.length;
+    const maxPage = total === 0 ? 1 : Math.ceil(total / PAGE_SIZE);
+    setCurrentPage((prev) => Math.min(prev, maxPage));
+  }, [sortedUsers]);
+
+  const totalUsers = sortedUsers?.length ?? 0;
+  const totalPages = totalUsers === 0 ? 1 : Math.ceil(totalUsers / PAGE_SIZE);
+
+  const startIndex = (currentPage - 1) * PAGE_SIZE;
+  const endIndex = Math.min(startIndex + PAGE_SIZE, totalUsers);
+
+  const pageUsers =
+    sortedUsers && totalUsers > 0
+      ? sortedUsers.slice(startIndex, endIndex)
+      : [];
+
+  /* ─────────────────────────────────────────────
+   * Handlers
+   * ───────────────────────────────────────────── */
+
   const handleLogout = async () => {
     try {
       await fetch("/api/logout", { method: "POST" });
@@ -206,33 +390,23 @@ const DashboardPage: React.FC = () => {
     setAlerts([]);
   };
 
-  const hasZone = (u: User) =>
-    u.zone_center_lat !== null &&
-    u.zone_center_lng !== null &&
-    u.zone_radius_m !== null;
-
-  const isInsideZone = (u: User): boolean => {
-    return (
-      u.inside_zone === true || u.inside_zone === 1 || u.inside_zone === "1"
-    );
+  // ⭐ NEW: simpler, reliable toggle asc/desc
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      // toggle direction on same column
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      // new column: start ascending (or "desc" if you prefer)
+      setSortKey(key);
+      setSortDirection("asc");
+    }
+    setCurrentPage(1);
   };
 
-  const formatContact = (u: User) => {
-    if (u.phone) return u.phone;
-    if (u.email) return u.email;
-    return "—";
-  };
+  /* ─────────────────────────────────────────────
+   * UI
+   * ───────────────────────────────────────────── */
 
-  const formatDateTime = (iso: string | null) => {
-    if (!iso) return "Never";
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return "Never";
-    return d.toLocaleString();
-  };
-
-  // ─────────────────────────────────────────────
-  // UI
-  // ─────────────────────────────────────────────
   return (
     <main className="min-h-screen bg-background text-foreground flex flex-col">
       {/* Top bar */}
@@ -340,7 +514,7 @@ const DashboardPage: React.FC = () => {
       <section className="flex-1 px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
         <div className="card">
           {/* Card header */}
-          <div className="px-4 sm:px-6 py-4 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div className="px-4 sm:px-6 py-3 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <div>
               <p className="text-sm font-medium">Users Overview</p>
               <p className="text-xs text-slate-500 mt-1">
@@ -350,67 +524,110 @@ const DashboardPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Table */}
+          {/* Table wrapper with internal scroll + sticky header */}
           <div className="scroll-x hide-scrollbar">
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead>
+            <div className="overflow-x-auto max-h-[calc(100vh-260px)]">
+              <table className="min-w-full table-fixed text-sm">
+                <thead className="sticky top-0 z-10 bg-slate-950 border-b border-slate-800">
                   <tr className="text-[11px] sm:text-xs uppercase tracking-wide text-slate-400">
-                    <th className="px-4 sm:px-6 py-3 text-left font-medium">
-                      Full Name
+                    {/* Full Name */}
+                    <th className="px-4 sm:px-6 py-2.5 text-left font-medium w-[220px]">
+                      <SortableHeader
+                        label="Full Name"
+                        column="full_name"
+                        activeKey={sortKey}
+                        direction={sortDirection}
+                        onSort={handleSort}
+                      />
                     </th>
-                    <th className="px-4 sm:px-6 py-3 text-left font-medium">
-                      Username
+
+                    {/* Username */}
+                    <th className="px-4 sm:px-6 py-2.5 text-left font-medium w-[160px]">
+                      <SortableHeader
+                        label="Username"
+                        column="username"
+                        activeKey={sortKey}
+                        direction={sortDirection}
+                        onSort={handleSort}
+                      />
                     </th>
-                    <th className="px-4 sm:px-6 py-3 text-left font-medium">
-                      Contact
+
+                    {/* Contact */}
+                    <th className="px-4 sm:px-6 py-2.5 text-left font-medium w-[200px]">
+                      <SortableHeader
+                        label="Contact"
+                        column="contact"
+                        activeKey={sortKey}
+                        direction={sortDirection}
+                        onSort={handleSort}
+                      />
                     </th>
-                    <th className="px-4 sm:px-6 py-3 text-left font-medium">
-                      Assigned Zone
+
+                    {/* Assigned Zone */}
+                    <th className="px-4 sm:px-6 py-2.5 text-left font-medium w-[170px]">
+                      <SortableHeader
+                        label="Assigned Zone"
+                        column="zone"
+                        activeKey={sortKey}
+                        direction={sortDirection}
+                        onSort={handleSort}
+                      />
                     </th>
-                    <th className="px-4 sm:px-6 py-3 text-left font-medium">
-                      Status
+
+                    {/* Status */}
+                    <th className="px-4 sm:px-6 py-2.5 text-left font-medium w-[150px]">
+                      <SortableHeader
+                        label="Status"
+                        column="status"
+                        activeKey={sortKey}
+                        direction={sortDirection}
+                        onSort={handleSort}
+                      />
                     </th>
-                    <th className="px-4 sm:px-6 py-3 text-center font-medium">
+
+                    {/* Track */}
+                    <th className="px-4 sm:px-6 py-2.5 text-center font-medium w-[110px]">
                       Track
                     </th>
-                    <th className="px-4 sm:px-6 py-3 text-center font-medium">
+
+                    {/* Logs */}
+                    <th className="px-4 sm:px-6 py-2.5 text-center font-medium w-[110px]">
                       Logs
                     </th>
                   </tr>
                 </thead>
 
                 <tbody className="divide-y divide-slate-800">
-                  {/* Initial loading state only (users === null) */}
+                  {/* Loading */}
                   {users === null && !usersError && (
                     <tr>
                       <td
                         colSpan={7}
-                        className="px-4 sm:px-6 py-10 text-center text-slate-500 text-sm"
+                        className="px-4 sm:px-6 py-8 text-center text-slate-500 text-sm"
                       >
                         Loading users…
                       </td>
                     </tr>
                   )}
 
-                  {/* Error state */}
+                  {/* Error */}
                   {usersError && (
                     <tr>
                       <td
                         colSpan={7}
-                        className="px-4 sm:px-6 py-10 text-center text-rose-400 text-sm"
+                        className="px-4 sm:px-6 py-8 text-center text-rose-400 text-sm"
                       >
                         {usersError}
                       </td>
                     </tr>
                   )}
 
-                  {/* Loaded, but no users */}
+                  {/* No users */}
                   {users !== null && !usersError && users.length === 0 && (
                     <tr>
                       <td
                         colSpan={7}
-                        className="px-4 sm:px-6 py-10 text-center text-slate-500 text-sm"
+                        className="px-4 sm:px-6 py-8 text-center text-slate-500 text-sm"
                       >
                         No users yet. Once mobile users sign in, they will
                         appear here.
@@ -418,42 +635,42 @@ const DashboardPage: React.FC = () => {
                     </tr>
                   )}
 
-                  {/* Normal data rows */}
+                  {/* Data rows */}
                   {users !== null &&
                     !usersError &&
                     users.length > 0 &&
-                    users.map((user) => {
+                    pageUsers.map((user) => {
                       const inside = isInsideZone(user);
                       const zoneAssigned = hasZone(user);
 
                       return (
-                        <tr
-                          key={user.id}
-                          className="hover:bg-slate-900/70 transition-colors"
-                        >
-                          <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-slate-100 align-top">
-                            <div className="text-sm">
+                        <tr key={user.id} className="transition-colors">
+                          {/* Full Name */}
+                          <td className="px-4 sm:px-6 py-2.5 whitespace-nowrap text-slate-100 align-top w-[220px]">
+                            <div className="text-sm truncate">
                               {user.full_name || "—"}
                             </div>
-                            <div className="mt-1 text-[11px] text-slate-500">
+                            <div className="mt-0.5 text-[11px] text-slate-500 truncate">
                               Last seen: {formatDateTime(user.last_seen)}
                             </div>
                           </td>
 
-                          <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-slate-100">
+                          {/* Username */}
+                          <td className="px-4 sm:px-6 py-2.5 whitespace-nowrap text-slate-100 w-[160px] truncate">
                             {user.username}
                           </td>
 
-                          <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-slate-200">
+                          {/* Contact */}
+                          <td className="px-4 sm:px-6 py-2.5 whitespace-nowrap text-slate-200 w-[200px] truncate">
                             {formatContact(user)}
                           </td>
 
                           {/* Assigned Zone */}
-                          <td className="px-4 sm:px-6 py-4">
+                          <td className="px-4 sm:px-6 py-2.5 w-[170px]">
                             <button
                               type="button"
                               onClick={() => setSelectedUserForZone(user)}
-                              className="btn-base bg-emerald-600 hover:bg-emerald-500 text-[11px] sm:text-xs font-semibold"
+                              className="btn-base bg-emerald-600 hover:bg-emerald-500 text-[11px] sm:text-xs font-semibold w-full"
                             >
                               View / Update
                             </button>
@@ -465,7 +682,7 @@ const DashboardPage: React.FC = () => {
                           </td>
 
                           {/* Status */}
-                          <td className="px-4 sm:px-6 py-4">
+                          <td className="px-4 sm:px-6 py-2.5 w-[150px]">
                             {zoneAssigned ? (
                               <div className="text-xs font-semibold">
                                 <span
@@ -493,24 +710,24 @@ const DashboardPage: React.FC = () => {
                             )}
                           </td>
 
-                          {/* Track button */}
-                          <td className="px-4 sm:px-6 py-4 text-center">
+                          {/* Track */}
+                          <td className="px-4 sm:px-6 py-2.5 text-center w-[110px]">
                             <button
                               type="button"
                               onClick={() => setSelectedUserForTrack(user)}
-                              className="btn-base bg-red-700 hover:bg-red-600 text-[11px] sm:text-xs font-semibold"
+                              className="btn-base bg-red-700 hover:bg-red-600 text-[11px] sm:text-xs font-semibold w-full"
                             >
                               Track
                             </button>
                           </td>
 
-                          {/* Logs buttons */}
-                          <td className="px-4 sm:px-6 py-4 text-center">
+                          {/* Logs */}
+                          <td className="px-4 sm:px-6 py-2.5 text-center w-[110px]">
                             <div className="flex items-center justify-center gap-2">
                               <button
                                 type="button"
                                 onClick={() => handleViewLogs(user.id)}
-                                className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-[#a28f00] text-slate-900 text-base font-semibold hover:bg-[#c3aa03] transition-colors"
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#a28f00] text-slate-900 text-base font-semibold hover:bg-[#c3aa03] transition-colors"
                                 title="View logs"
                               >
                                 <FaEye />
@@ -519,7 +736,7 @@ const DashboardPage: React.FC = () => {
                               <button
                                 type="button"
                                 onClick={() => handleDownloadUserLogs(user.id)}
-                                className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-[#a28f00] text-slate-900 text-base font-semibold hover:bg-[#c3aa03] transition-colors"
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#a28f00] text-slate-900 text-base font-semibold hover:bg-[#c3aa03] transition-colors"
                                 title="Download CSV"
                               >
                                 <FaDownload />
@@ -533,6 +750,43 @@ const DashboardPage: React.FC = () => {
               </table>
             </div>
           </div>
+
+          {/* Pagination footer */}
+          {sortedUsers && sortedUsers.length > 0 && (
+            <div className="px-4 sm:px-6 py-3 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500">
+              <span>
+                Showing{" "}
+                <span className="font-semibold">
+                  {totalUsers === 0 ? 0 : startIndex + 1}–{endIndex}
+                </span>{" "}
+                of <span className="font-semibold">{totalUsers}</span> users
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="btn-base btn-ghost text-[11px] px-3 py-1 disabled:opacity-50"
+                >
+                  Previous
+                </button>
+                <span>
+                  Page <span className="font-semibold">{currentPage}</span> of{" "}
+                  <span className="font-semibold">{totalPages}</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCurrentPage((p) => Math.min(totalPages, p + 1))
+                  }
+                  disabled={currentPage === totalPages}
+                  className="btn-base btn-ghost text-[11px] px-3 py-1 disabled:opacity-50"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </section>
 
@@ -543,7 +797,6 @@ const DashboardPage: React.FC = () => {
           onClose={() => setSelectedUserForZone(null)}
           onSave={(updated) => {
             const updatedUser = updated as unknown as User;
-
             if (updatedUser && typeof updatedUser.id === "number") {
               setUsers((prev) =>
                 prev
@@ -551,7 +804,6 @@ const DashboardPage: React.FC = () => {
                   : prev
               );
             }
-
             setSelectedUserForZone(null);
           }}
         />
