@@ -1,4 +1,3 @@
-// src/components/ThemeToggle.tsx
 "use client";
 
 import { useTheme } from "@/context/ThemeContext";
@@ -22,10 +21,10 @@ export default function ThemeToggle() {
       type="button"
       onClick={cycleMode}
       aria-label="Toggle theme"
-      className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-medium hover:bg-slate-800 transition-colors"
+      className="btn-base btn-ghost"
     >
-      <Icon className="text-slate-200" />
-      <span>{label}</span>
+      <Icon className="text-sm" />
+      <span className="text-xs font-medium">{label}</span>
     </button>
   );
 }

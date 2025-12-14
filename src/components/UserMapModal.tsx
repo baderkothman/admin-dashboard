@@ -1,4 +1,3 @@
-// src/components/UserMapModal.tsx
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
@@ -54,9 +53,6 @@ const defaultIcon = L.icon({
 
 L.Marker.prototype.options.icon = defaultIcon;
 
-/**
- * Handle map click → give lat/lng back to parent.
- */
 function MapClickHandler({
   onClick,
 }: {
@@ -105,7 +101,6 @@ export default function UserMapModal({
     setCenterLng(latLng.lng);
   };
 
-  // Keep map centered when centerLat/centerLng changes
   useEffect(() => {
     if (centerLat == null || centerLng == null) return;
     const map = mapRef.current;
@@ -114,7 +109,7 @@ export default function UserMapModal({
   }, [centerLat, centerLng]);
 
   // ─────────────────────────────────────────────
-  // Search with Nominatim
+  // Search (Nominatim)
   // ─────────────────────────────────────────────
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -130,20 +125,13 @@ export default function UserMapModal({
         q
       )}&limit=5`;
 
-      const res = await fetch(url, {
-        headers: { "Accept-Language": "en" },
-      });
-
-      if (!res.ok) {
-        throw new Error("Search failed");
-      }
+      const res = await fetch(url, { headers: { "Accept-Language": "en" } });
+      if (!res.ok) throw new Error("Search failed");
 
       const data = (await res.json()) as SearchResult[];
       setSearchResults(data);
 
-      if (data.length === 0) {
-        setSearchError("No locations found.");
-      }
+      if (data.length === 0) setSearchError("No locations found.");
     } catch (err) {
       console.error("Geocoding error:", err);
       setSearchError("Could not search location.");
@@ -162,13 +150,11 @@ export default function UserMapModal({
     setSearchResults([]);
 
     const map = mapRef.current;
-    if (map) {
-      map.setView([latNum, lonNum], 16);
-    }
+    if (map) map.setView([latNum, lonNum], 16);
   };
 
   // ─────────────────────────────────────────────
-  // Save / Clear handlers
+  // Save / Clear
   // ─────────────────────────────────────────────
   const handleSave = async () => {
     setSaveError(null);
@@ -198,14 +184,12 @@ export default function UserMapModal({
         throw new Error("Failed to save zone");
       }
 
-      const updatedUser: User = {
+      onSave({
         ...user,
         zone_center_lat: centerLat,
         zone_center_lng: centerLng,
         zone_radius_m: radius,
-      };
-
-      onSave(updatedUser);
+      });
     } catch (err) {
       console.error(err);
       setSaveError("Save zone failed");
@@ -237,16 +221,15 @@ export default function UserMapModal({
         throw new Error("Failed to clear zone");
       }
 
-      const updatedUser: User = {
+      setCenterLat(null);
+      setCenterLng(null);
+
+      onSave({
         ...user,
         zone_center_lat: null,
         zone_center_lng: null,
         zone_radius_m: null,
-      };
-
-      setCenterLat(null);
-      setCenterLng(null);
-      onSave(updatedUser);
+      });
     } catch (err) {
       console.error(err);
       setSaveError("Clear zone failed");
@@ -255,63 +238,78 @@ export default function UserMapModal({
     }
   };
 
-  // ─────────────────────────────────────────────
-  // UI (aligned with design system)
-  // ─────────────────────────────────────────────
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-      {/* Modal surface uses card → shared tokens / shadows */}
-      <div className="card w-full max-w-6xl h-[80vh] mx-3 md:mx-0 flex flex-col border border-slate-800">
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-3">
+      <div className="card w-full max-w-6xl h-[80vh] flex flex-col border border-[hsl(var(--border))]">
         {/* Top bar */}
-        <div className="flex items-center justify-end px-4 py-3 border-b border-slate-800">
+        <div className="flex items-center justify-end px-4 py-3 border-b border-[hsl(var(--border))]">
           <button
             onClick={onClose}
             className="btn-base btn-ghost !h-9 !w-9 !p-0 rounded-full"
+            aria-label="Close"
+            title="Close"
           >
             ✕
           </button>
         </div>
 
-        {/* Main grid: map + search (right on desktop), controls (left) */}
+        {/* Main grid */}
         <div className="flex-1 px-4 md:px-6 py-4">
           <div className="grid grid-cols-1 md:grid-cols-[1fr_2fr] gap-4 md:gap-6 h-full">
-            {/* MAP + SEARCH – first on mobile, right on desktop */}
+            {/* MAP + SEARCH */}
             <div className="order-1 md:order-2 flex flex-col h-full">
-              {/* Search bar */}
+              {/* Search */}
               <form
                 onSubmit={handleSearch}
                 className="mb-3 flex items-center gap-2"
               >
-                <div className="flex-1 input-shell">
+                <div
+                  className="
+                    flex-1 flex items-center rounded-full px-4 py-2.5
+                    border border-[hsl(var(--border))]
+                    bg-[hsl(var(--popover))]
+                    shadow-[var(--shadow-soft)]
+                    focus-within:border-[hsl(var(--ring))]
+                    focus-within:ring-4 focus-within:ring-[hsl(var(--ring)/0.25)]
+                  "
+                >
                   <input
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search for the city…"
-                    className="bg-transparent outline-none text-sm"
+                    className="w-full bg-transparent outline-none text-sm placeholder:text-[hsl(var(--muted-foreground))]"
                   />
                 </div>
+
                 <button
                   type="submit"
                   disabled={searchLoading}
-                  className="btn-base btn-primary text-xs whitespace-nowrap"
+                  className="
+                    btn-base text-xs whitespace-nowrap
+                    bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]
+                    hover:bg-[hsl(var(--primary)/0.92)]
+                    disabled:opacity-60 disabled:cursor-not-allowed
+                  "
                 >
                   {searchLoading ? "Searching…" : "Search"}
                 </button>
               </form>
 
               {searchError && (
-                <p className="mb-2 text-[11px] text-rose-400">{searchError}</p>
+                <p className="mb-2 text-[11px] text-[hsl(var(--danger))]">
+                  {searchError}
+                </p>
               )}
 
               {searchResults.length > 0 && (
-                <div className="mb-3 max-h-32 overflow-y-auto rounded-2xl border border-slate-700 bg-slate-950 text-xs">
+                <div className="mb-3 max-h-32 overflow-y-auto rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] text-xs shadow-[var(--shadow-soft)]">
                   {searchResults.map((r) => (
                     <button
                       key={`${r.lat}-${r.lon}-${r.display_name}`}
                       type="button"
                       onClick={() => handleSelectResult(r)}
-                      className="w-full text-left px-3 py-2 hover:bg-slate-900 transition-colors"
+                      className="w-full text-left px-3 py-2 hover:bg-[hsl(var(--muted))] transition-colors"
                     >
                       {r.display_name}
                     </button>
@@ -319,8 +317,8 @@ export default function UserMapModal({
                 </div>
               )}
 
-              {/* Map container */}
-              <div className="flex-1 rounded-2xl border border-slate-800 overflow-hidden">
+              {/* Map */}
+              <div className="flex-1 rounded-2xl border border-[hsl(var(--border))] overflow-hidden">
                 <div className="h-64 md:h-full">
                   <MapContainer
                     center={initialCenter}
@@ -352,36 +350,40 @@ export default function UserMapModal({
               </div>
             </div>
 
-            {/* CONTROLS – second on mobile, left on desktop */}
+            {/* CONTROLS */}
             <div className="order-2 md:order-1 flex flex-col justify-between mt-4 md:mt-0">
               <div className="space-y-6">
                 {/* Title */}
                 <div>
                   <h2 className="text-lg font-semibold">
                     Assign Zone for{" "}
-                    <span className="text-emerald-400">@{user.username}</span>
+                    <span className="text-[hsl(var(--primary))]">
+                      @{user.username}
+                    </span>
                   </h2>
                   {user.full_name && (
-                    <p className="text-xs text-slate-400 mt-1">
+                    <p className="text-xs mt-1 text-[hsl(var(--muted-foreground))]">
                       {user.full_name}
                     </p>
                   )}
                 </div>
 
-                {/* Lat / Lng display */}
+                {/* Lat/Lng */}
                 <div className="space-y-1 text-sm">
-                  <p className="text-slate-200">Latitude</p>
-                  <p className="text-xs font-mono text-emerald-400">
+                  <p className="text-[hsl(var(--foreground))]">Latitude</p>
+                  <p className="text-xs font-mono text-[hsl(var(--primary))]">
                     {centerLat != null ? centerLat.toFixed(6) : "—"}
                   </p>
 
-                  <p className="mt-3 text-slate-200">Longitude</p>
-                  <p className="text-xs font-mono text-emerald-400">
+                  <p className="mt-3 text-[hsl(var(--foreground))]">
+                    Longitude
+                  </p>
+                  <p className="text-xs font-mono text-[hsl(var(--primary))]">
                     {centerLng != null ? centerLng.toFixed(6) : "—"}
                   </p>
                 </div>
 
-                {/* Radius slider */}
+                {/* Radius */}
                 <div className="mt-4">
                   <p className="text-sm font-medium mb-2">Radius</p>
                   <input
@@ -391,16 +393,25 @@ export default function UserMapModal({
                     step={10}
                     value={radius}
                     onChange={(e) => setRadius(Number(e.target.value))}
-                    className="w-full accent-emerald-500"
+                    className="w-full accent-[hsl(var(--primary))]"
                   />
-                  <p className="mt-1 text-xs text-slate-300">{radius} meters</p>
+                  <p className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">
+                    {radius} meters
+                  </p>
                 </div>
               </div>
 
-              {/* Save / Clear buttons & error */}
+              {/* Actions */}
               <div className="mt-6 space-y-2">
                 {saveError && (
-                  <p className="text-xs text-rose-400 bg-rose-950/40 border border-rose-700 rounded-lg px-3 py-2">
+                  <p
+                    className="
+                      text-xs rounded-2xl px-3 py-2 border
+                      border-[hsl(var(--danger)/0.35)]
+                      bg-[hsl(var(--danger)/0.12)]
+                      text-[hsl(var(--danger))]
+                    "
+                  >
                     {saveError}
                   </p>
                 )}
@@ -409,7 +420,7 @@ export default function UserMapModal({
                   type="button"
                   onClick={handleSave}
                   disabled={saving}
-                  className="btn-base w-full bg-emerald-600 hover:bg-emerald-500 text-sm font-semibold text-white disabled:opacity-60"
+                  className="btn-base w-full bg-emerald-600 hover:bg-emerald-500 text-sm font-semibold text-white disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {saving ? "Saving…" : "Save Zone"}
                 </button>
@@ -418,7 +429,7 @@ export default function UserMapModal({
                   type="button"
                   onClick={handleClearZone}
                   disabled={saving}
-                  className="btn-base w-full bg-red-700 hover:bg-red-600 text-sm font-semibold text-white disabled:opacity-60"
+                  className="btn-base w-full bg-red-700 hover:bg-red-600 text-sm font-semibold text-white disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   Clear Zone
                 </button>

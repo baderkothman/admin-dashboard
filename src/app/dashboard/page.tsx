@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import {
@@ -55,6 +55,73 @@ type Alert = {
 
 type SortKey = "full_name" | "username" | "contact" | "zone" | "status";
 type SortDirection = "asc" | "desc";
+
+/* ─────────────────────────────────────────────
+ * Persist table state (sort + page)
+ * ───────────────────────────────────────────── */
+
+const DASH_TABLE_STATE_KEY = "geofence:dashboardTableState:v1";
+
+type DashboardTableState = {
+  sortKey: SortKey;
+  sortDirection: SortDirection;
+  currentPage: number;
+};
+
+const VALID_SORT_KEYS: SortKey[] = [
+  "full_name",
+  "username",
+  "contact",
+  "zone",
+  "status",
+];
+
+function readDashboardTableState(): DashboardTableState | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = window.localStorage.getItem(DASH_TABLE_STATE_KEY);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw) as Partial<DashboardTableState>;
+
+    const sortKey: SortKey = VALID_SORT_KEYS.includes(parsed.sortKey as SortKey)
+      ? (parsed.sortKey as SortKey)
+      : "full_name";
+
+    const sortDirection: SortDirection =
+      parsed.sortDirection === "asc" || parsed.sortDirection === "desc"
+        ? parsed.sortDirection
+        : "asc";
+
+    const currentPage =
+      typeof parsed.currentPage === "number" && parsed.currentPage >= 1
+        ? Math.floor(parsed.currentPage)
+        : 1;
+
+    return { sortKey, sortDirection, currentPage };
+  } catch {
+    return null;
+  }
+}
+
+function writeDashboardTableState(state: DashboardTableState) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(DASH_TABLE_STATE_KEY, JSON.stringify(state));
+  } catch {
+    // ignore
+  }
+}
+
+function clearDashboardTableState() {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(DASH_TABLE_STATE_KEY);
+  } catch {
+    // ignore
+  }
+}
 
 /* ─────────────────────────────────────────────
  * Pure helpers
@@ -117,7 +184,7 @@ function SortableHeader({
       }`}
     >
       <span>{label}</span>
-      <span className="text-[10px] text-slate-500 group-hover:text-slate-300">
+      <span className="text-[10px] text-[hsl(var(--muted-foreground))] group-hover:text-[hsl(var(--foreground))]">
         {isActive ? (
           direction === "asc" ? (
             <FaSortUp />
@@ -155,13 +222,46 @@ const DashboardPage: React.FC = () => {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [alertsOpen, setAlertsOpen] = useState(false);
 
+  // Ref for bell + popup (for click-outside)
+  const alertsRef = useRef<HTMLDivElement | null>(null);
+
   // Sorting
   const [sortKey, setSortKey] = useState<SortKey>("full_name");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
-  // 👉 if you prefer descending by default, change to: useState<SortDirection>("desc")
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
+
+  // IMPORTANT: skip the very first persist effect to avoid overwriting saved state with defaults
+  const skipFirstPersistRef = useRef(true);
+
+  /* ─────────────────────────────────────────────
+   * Restore table state on mount
+   * ───────────────────────────────────────────── */
+  useEffect(() => {
+    const saved = readDashboardTableState();
+    if (!saved) return;
+
+    // Only set if different (avoids extra renders)
+    setSortKey((prev) => (prev === saved.sortKey ? prev : saved.sortKey));
+    setSortDirection((prev) =>
+      prev === saved.sortDirection ? prev : saved.sortDirection
+    );
+    setCurrentPage((prev) =>
+      prev === saved.currentPage ? prev : saved.currentPage
+    );
+  }, []);
+
+  /* ─────────────────────────────────────────────
+   * Persist table state whenever it changes
+   * ───────────────────────────────────────────── */
+  useEffect(() => {
+    if (skipFirstPersistRef.current) {
+      skipFirstPersistRef.current = false;
+      return;
+    }
+    writeDashboardTableState({ sortKey, sortDirection, currentPage });
+  }, [sortKey, sortDirection, currentPage]);
 
   /* ─────────────────────────────────────────────
    * Auth guard
@@ -169,9 +269,7 @@ const DashboardPage: React.FC = () => {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const isAuthed = localStorage.getItem("adminAuth") === "true";
-    if (!isAuthed) {
-      router.replace("/");
-    }
+    if (!isAuthed) router.replace("/");
   }, [router]);
 
   /* ─────────────────────────────────────────────
@@ -181,9 +279,7 @@ const DashboardPage: React.FC = () => {
     const fetchUsers = async () => {
       try {
         const res = await fetch("/api/users", { cache: "no-store" });
-        if (!res.ok) {
-          throw new Error("Failed to load users");
-        }
+        if (!res.ok) throw new Error("Failed to load users");
 
         const data: User[] = await res.json();
         const nonAdmins = data.filter((u) => u.role !== "admin");
@@ -198,20 +294,13 @@ const DashboardPage: React.FC = () => {
 
         setUsersError(null);
       } catch (err: unknown) {
-        if (err instanceof Error) {
-          setUsersError(err.message);
-        } else {
-          setUsersError("Failed to load users");
-        }
+        if (err instanceof Error) setUsersError(err.message);
+        else setUsersError("Failed to load users");
       }
     };
 
     void fetchUsers();
-
-    const interval = setInterval(() => {
-      void fetchUsers();
-    }, 3000);
-
+    const interval = setInterval(() => void fetchUsers(), 3000);
     return () => clearInterval(interval);
   }, []);
 
@@ -263,6 +352,35 @@ const DashboardPage: React.FC = () => {
     const interval = setInterval(fetchAlerts, 3000);
     return () => clearInterval(interval);
   }, []);
+
+  /* ─────────────────────────────────────────────
+   * Close alerts on click outside + Escape
+   * ───────────────────────────────────────────── */
+  useEffect(() => {
+    if (!alertsOpen) return;
+
+    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
+      if (!alertsRef.current) return;
+      const target = event.target as Node | null;
+      if (target && !alertsRef.current.contains(target)) {
+        setAlertsOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setAlertsOpen(false);
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("touchstart", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("touchstart", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [alertsOpen]);
 
   /* ─────────────────────────────────────────────
    * Sorting + pagination derived data
@@ -317,7 +435,6 @@ const DashboardPage: React.FC = () => {
       }
 
       if (result === 0) {
-        // tie-breaker: created_at (newer last in asc, newer first in desc)
         const createdA = a.created_at ? new Date(a.created_at).getTime() : 0;
         const createdB = b.created_at ? new Date(b.created_at).getTime() : 0;
         result = createdA - createdB;
@@ -364,6 +481,9 @@ const DashboardPage: React.FC = () => {
       localStorage.removeItem("adminUsername");
     }
 
+    // Optional: clear saved table state on logout
+    clearDashboardTableState();
+
     router.replace("/");
   };
 
@@ -390,13 +510,10 @@ const DashboardPage: React.FC = () => {
     setAlerts([]);
   };
 
-  // ⭐ NEW: simpler, reliable toggle asc/desc
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
-      // toggle direction on same column
       setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
     } else {
-      // new column: start ascending (or "desc" if you prefer)
       setSortKey(key);
       setSortDirection("asc");
     }
@@ -408,61 +525,73 @@ const DashboardPage: React.FC = () => {
    * ───────────────────────────────────────────── */
 
   return (
-    <main className="min-h-screen bg-background text-foreground flex flex-col">
+    <main className="min-h-screen bg-[var(--surface-root)] text-[hsl(var(--foreground))] flex flex-col">
       {/* Top bar */}
-      <header className="px-4 sm:px-6 lg:px-8 py-3 sm:py-4 border-b border-slate-800 bg-slate-950/80 backdrop-blur flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <header
+        className="
+          dashboard-topbar
+          sticky top-0 z-30
+          px-4 sm:px-6 lg:px-8
+          py-3 sm:py-4
+          border-b
+          flex flex-col gap-3
+          sm:flex-row sm:items-center sm:justify-between
+        "
+      >
         <div>
           <h1 className="text-lg sm:text-xl font-semibold tracking-tight">
             Admin Dashboard
           </h1>
-          <p className="mt-1 text-xs sm:text-sm text-slate-400">
+          <p className="mt-1 text-xs sm:text-sm text-[hsl(var(--muted-foreground))]">
             Manage users, geofence zones and live location tracking.
           </p>
         </div>
 
         <div className="flex items-center gap-3 sm:gap-4">
-          {/* Theme toggle */}
           <ThemeToggle />
 
-          {/* Alerts bell */}
-          <div className="relative">
+          {/* Alerts bell + popup */}
+          <div className="relative" ref={alertsRef}>
             <button
               type="button"
               onClick={() => setAlertsOpen((prev) => !prev)}
-              className="btn-base btn-ghost !h-10 !w-10 !p-0 rounded-full border border-slate-700 bg-slate-900 hover:bg-slate-800"
+              className="btn-base btn-ghost !h-10 !w-10 !p-0 rounded-full relative"
+              aria-expanded={alertsOpen}
+              aria-label="Toggle alerts"
             >
               <FaBell className="text-sm" aria-hidden="true" />
               {alerts.length > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-emerald-500">
+                <span className="absolute -top-0.5 -right-0.5 inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[hsl(var(--success))]">
                   <span className="sr-only">Unread alerts</span>
                 </span>
               )}
             </button>
 
             {alertsOpen && (
-              <div className="absolute right-0 mt-3 w-80 rounded-2xl border border-slate-800 bg-slate-950 shadow-[var(--shadow-strong)] z-20">
-                <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800">
-                  <span className="text-xs font-medium uppercase tracking-wide text-slate-400">
+              <div className="absolute right-0 mt-3 w-80 card !rounded-2xl shadow-[var(--shadow-elevated)] z-20">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-[hsl(var(--border))]">
+                  <span className="text-xs font-medium uppercase tracking-wide text-[hsl(var(--muted-foreground))]">
                     Recent Alerts
                   </span>
-                  <div className="flex gap-2">
+                  <div className="flex gap-3">
                     <button
                       onClick={handleClearAlerts}
-                      className="text-[11px] text-slate-400 hover:text-slate-200"
+                      className="text-[11px] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
                     >
                       Clear
                     </button>
                     <button
                       onClick={handleDownloadAllLogs}
-                      className="text-[11px] text-emerald-400 hover:text-emerald-300"
+                      className="text-[11px] text-[hsl(var(--primary))] hover:text-[hsl(var(--primary)/0.9)]"
                     >
                       Download all
                     </button>
                   </div>
                 </div>
+
                 <div className="max-h-80 overflow-y-auto py-1">
                   {alerts.length === 0 && (
-                    <div className="px-4 py-6 text-xs text-slate-500 text-center">
+                    <div className="px-4 py-6 text-xs text-[hsl(var(--muted-foreground))] text-center">
                       No alerts after the last clear.
                     </div>
                   )}
@@ -472,23 +601,27 @@ const DashboardPage: React.FC = () => {
                     return (
                       <div
                         key={alert.id}
-                        className="flex items-start gap-2 px-4 py-2.5 hover:bg-slate-900/70 transition-colors"
+                        className="flex items-start gap-2 px-4 py-2.5 hover:bg-[hsl(var(--muted))] transition-colors"
                       >
                         <FaCircle
                           className={`mt-1 text-[8px] ${
-                            isEnter ? "text-emerald-400" : "text-rose-400"
+                            isEnter
+                              ? "text-[hsl(var(--success))]"
+                              : "text-[hsl(var(--danger))]"
                           }`}
                         />
+
                         <div className="flex-1">
                           <div className="flex items-center justify-between gap-2">
-                            <p className="text-xs font-medium text-slate-100">
+                            <p className="text-xs font-medium">
                               {isEnter ? "Entered zone" : "Left zone"}
                             </p>
-                            <span className="text-[10px] text-slate-500">
+                            <span className="text-[10px] text-[hsl(var(--muted-foreground))]">
                               {new Date(alert.occurred_at).toLocaleTimeString()}
                             </span>
                           </div>
-                          <p className="mt-0.5 text-[11px] text-slate-400">
+
+                          <p className="mt-0.5 text-[11px] text-[hsl(var(--muted-foreground))]">
                             {alert.username ?? `User #${alert.user_id}`}
                           </p>
                         </div>
@@ -500,10 +633,10 @@ const DashboardPage: React.FC = () => {
             )}
           </div>
 
-          {/* Logout button */}
+          {/* Logout */}
           <button
             onClick={handleLogout}
-            className="btn-base btn-ghost rounded-full border border-slate-700 bg-slate-900 hover:bg-slate-800 text-xs sm:text-sm"
+            className="btn-base btn-ghost rounded-full text-xs sm:text-sm"
           >
             Logout
           </button>
@@ -514,23 +647,22 @@ const DashboardPage: React.FC = () => {
       <section className="flex-1 px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
         <div className="card">
           {/* Card header */}
-          <div className="px-4 sm:px-6 py-3 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div className="px-4 sm:px-6 py-3 border-b border-[hsl(var(--border))] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <div>
               <p className="text-sm font-medium">Users Overview</p>
-              <p className="text-xs text-slate-500 mt-1">
+              <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1">
                 Full list of mobile users, their assigned zones and current
                 status.
               </p>
             </div>
           </div>
 
-          {/* Table wrapper with internal scroll + sticky header */}
+          {/* Table wrapper */}
           <div className="scroll-x hide-scrollbar">
             <div className="overflow-x-auto max-h-[calc(100vh-260px)]">
-              <table className="min-w-full table-fixed text-sm">
-                <thead className="sticky top-0 z-10 bg-slate-950 border-b border-slate-800">
-                  <tr className="text-[11px] sm:text-xs uppercase tracking-wide text-slate-400">
-                    {/* Full Name */}
+              <table className="dashboard-table min-w-full table-fixed text-sm">
+                <thead className="dashboard-thead sticky top-0 z-10 border-b border-[hsl(var(--border))]">
+                  <tr>
                     <th className="px-4 sm:px-6 py-2.5 text-left font-medium w-[220px]">
                       <SortableHeader
                         label="Full Name"
@@ -541,7 +673,6 @@ const DashboardPage: React.FC = () => {
                       />
                     </th>
 
-                    {/* Username */}
                     <th className="px-4 sm:px-6 py-2.5 text-left font-medium w-[160px]">
                       <SortableHeader
                         label="Username"
@@ -552,7 +683,6 @@ const DashboardPage: React.FC = () => {
                       />
                     </th>
 
-                    {/* Contact */}
                     <th className="px-4 sm:px-6 py-2.5 text-left font-medium w-[200px]">
                       <SortableHeader
                         label="Contact"
@@ -563,7 +693,6 @@ const DashboardPage: React.FC = () => {
                       />
                     </th>
 
-                    {/* Assigned Zone */}
                     <th className="px-4 sm:px-6 py-2.5 text-left font-medium w-[170px]">
                       <SortableHeader
                         label="Assigned Zone"
@@ -574,7 +703,6 @@ const DashboardPage: React.FC = () => {
                       />
                     </th>
 
-                    {/* Status */}
                     <th className="px-4 sm:px-6 py-2.5 text-left font-medium w-[150px]">
                       <SortableHeader
                         label="Status"
@@ -585,25 +713,23 @@ const DashboardPage: React.FC = () => {
                       />
                     </th>
 
-                    {/* Track */}
                     <th className="px-4 sm:px-6 py-2.5 text-center font-medium w-[110px]">
                       Track
                     </th>
 
-                    {/* Logs */}
                     <th className="px-4 sm:px-6 py-2.5 text-center font-medium w-[110px]">
                       Logs
                     </th>
                   </tr>
                 </thead>
 
-                <tbody className="divide-y divide-slate-800">
+                <tbody>
                   {/* Loading */}
                   {users === null && !usersError && (
                     <tr>
                       <td
                         colSpan={7}
-                        className="px-4 sm:px-6 py-8 text-center text-slate-500 text-sm"
+                        className="px-4 sm:px-6 py-8 text-center text-[hsl(var(--muted-foreground))] text-sm"
                       >
                         Loading users…
                       </td>
@@ -615,7 +741,7 @@ const DashboardPage: React.FC = () => {
                     <tr>
                       <td
                         colSpan={7}
-                        className="px-4 sm:px-6 py-8 text-center text-rose-400 text-sm"
+                        className="px-4 sm:px-6 py-8 text-center text-[hsl(var(--danger))] text-sm"
                       >
                         {usersError}
                       </td>
@@ -627,7 +753,7 @@ const DashboardPage: React.FC = () => {
                     <tr>
                       <td
                         colSpan={7}
-                        className="px-4 sm:px-6 py-8 text-center text-slate-500 text-sm"
+                        className="px-4 sm:px-6 py-8 text-center text-[hsl(var(--muted-foreground))] text-sm"
                       >
                         No users yet. Once mobile users sign in, they will
                         appear here.
@@ -646,22 +772,22 @@ const DashboardPage: React.FC = () => {
                       return (
                         <tr key={user.id} className="transition-colors">
                           {/* Full Name */}
-                          <td className="px-4 sm:px-6 py-2.5 whitespace-nowrap text-slate-100 align-top w-[220px]">
+                          <td className="px-4 sm:px-6 py-2.5 whitespace-nowrap align-top w-[220px]">
                             <div className="text-sm truncate">
                               {user.full_name || "—"}
                             </div>
-                            <div className="mt-0.5 text-[11px] text-slate-500 truncate">
+                            <div className="mt-0.5 text-[11px] text-[hsl(var(--muted-foreground))] truncate">
                               Last seen: {formatDateTime(user.last_seen)}
                             </div>
                           </td>
 
                           {/* Username */}
-                          <td className="px-4 sm:px-6 py-2.5 whitespace-nowrap text-slate-100 w-[160px] truncate">
+                          <td className="px-4 sm:px-6 py-2.5 whitespace-nowrap w-[160px] truncate">
                             {user.username}
                           </td>
 
                           {/* Contact */}
-                          <td className="px-4 sm:px-6 py-2.5 whitespace-nowrap text-slate-200 w-[200px] truncate">
+                          <td className="px-4 sm:px-6 py-2.5 whitespace-nowrap w-[200px] truncate text-[hsl(var(--muted-foreground))]">
                             {formatContact(user)}
                           </td>
 
@@ -670,12 +796,12 @@ const DashboardPage: React.FC = () => {
                             <button
                               type="button"
                               onClick={() => setSelectedUserForZone(user)}
-                              className="btn-base bg-emerald-600 hover:bg-emerald-500 text-[11px] sm:text-xs font-semibold w-full"
+                              className="btn-base bg-emerald-500 hover:bg-emerald-400 text-[11px] sm:text-xs font-semibold text-white w-full"
                             >
                               View / Update
                             </button>
                             {!zoneAssigned && (
-                              <div className="mt-1 text-[11px] text-slate-500">
+                              <div className="mt-1 text-[11px] text-[hsl(var(--muted-foreground))]">
                                 No zone assigned yet
                               </div>
                             )}
@@ -688,23 +814,27 @@ const DashboardPage: React.FC = () => {
                                 <span
                                   className={
                                     inside
-                                      ? "text-emerald-400"
-                                      : "text-slate-500"
+                                      ? "text-[hsl(var(--success))]"
+                                      : "text-[hsl(var(--muted-foreground))]"
                                   }
                                 >
                                   Inside
                                 </span>
-                                <span className="mx-0.5 text-slate-600">/</span>
+                                <span className="mx-0.5 text-[hsl(var(--muted-foreground))]">
+                                  /
+                                </span>
                                 <span
                                   className={
-                                    !inside ? "text-rose-400" : "text-slate-500"
+                                    !inside
+                                      ? "text-[hsl(var(--danger))]"
+                                      : "text-[hsl(var(--muted-foreground))]"
                                   }
                                 >
                                   Outside
                                 </span>
                               </div>
                             ) : (
-                              <span className="text-xs text-slate-500 italic">
+                              <span className="text-xs text-[hsl(var(--muted-foreground))] italic">
                                 No zone
                               </span>
                             )}
@@ -715,7 +845,7 @@ const DashboardPage: React.FC = () => {
                             <button
                               type="button"
                               onClick={() => setSelectedUserForTrack(user)}
-                              className="btn-base bg-red-700 hover:bg-red-600 text-[11px] sm:text-xs font-semibold w-full"
+                              className="btn-base bg-rose-500 hover:bg-rose-400 text-[11px] sm:text-xs font-semibold text-white w-full"
                             >
                               Track
                             </button>
@@ -727,7 +857,7 @@ const DashboardPage: React.FC = () => {
                               <button
                                 type="button"
                                 onClick={() => handleViewLogs(user.id)}
-                                className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#a28f00] text-slate-900 text-base font-semibold hover:bg-[#c3aa03] transition-colors"
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-amber-500 hover:bg-amber-400 text-base font-semibold transition-colors"
                                 title="View logs"
                               >
                                 <FaEye />
@@ -736,7 +866,7 @@ const DashboardPage: React.FC = () => {
                               <button
                                 type="button"
                                 onClick={() => handleDownloadUserLogs(user.id)}
-                                className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#a28f00] text-slate-900 text-base font-semibold hover:bg-[#c3aa03] transition-colors"
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-amber-500 hover:bg-amber-400 text-base font-semibold transition-colors"
                                 title="Download CSV"
                               >
                                 <FaDownload />
@@ -753,34 +883,47 @@ const DashboardPage: React.FC = () => {
 
           {/* Pagination footer */}
           {sortedUsers && sortedUsers.length > 0 && (
-            <div className="px-4 sm:px-6 py-3 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500">
+            <div className="px-4 sm:px-6 py-3 border-t border-[hsl(var(--border))] flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-[hsl(var(--muted-foreground))]">
               <span>
                 Showing{" "}
-                <span className="font-semibold">
+                <span className="font-semibold text-[hsl(var(--foreground))]">
                   {totalUsers === 0 ? 0 : startIndex + 1}–{endIndex}
                 </span>{" "}
-                of <span className="font-semibold">{totalUsers}</span> users
+                of{" "}
+                <span className="font-semibold text-[hsl(var(--foreground))]">
+                  {totalUsers}
+                </span>{" "}
+                users
               </span>
+
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                   disabled={currentPage === 1}
-                  className="btn-base btn-ghost text-[11px] px-3 py-1 disabled:opacity-50"
+                  className="btn-base btn-ghost text-[11px] px-3 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Previous
                 </button>
+
                 <span>
-                  Page <span className="font-semibold">{currentPage}</span> of{" "}
-                  <span className="font-semibold">{totalPages}</span>
+                  Page{" "}
+                  <span className="font-semibold text-[hsl(var(--foreground))]">
+                    {currentPage}
+                  </span>{" "}
+                  of{" "}
+                  <span className="font-semibold text-[hsl(var(--foreground))]">
+                    {totalPages}
+                  </span>
                 </span>
+
                 <button
                   type="button"
                   onClick={() =>
                     setCurrentPage((p) => Math.min(totalPages, p + 1))
                   }
                   disabled={currentPage === totalPages}
-                  className="btn-base btn-ghost text-[11px] px-3 py-1 disabled:opacity-50"
+                  className="btn-base btn-ghost text-[11px] px-3 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Next
                 </button>

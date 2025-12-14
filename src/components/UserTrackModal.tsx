@@ -1,10 +1,9 @@
-// src/components/UserTrackModal.tsx
 "use client";
 
 /**
  * UserTrackModal
  * --------------
- * Read-only modal for tracking a user's **latest known location** on a map.
+ * Read-only modal for tracking a user's latest known location on a map.
  */
 
 import { MapContainer, TileLayer, Circle, Marker } from "react-leaflet";
@@ -52,24 +51,28 @@ export default function UserTrackModal({ user, onClose }: Props) {
     ? [Number(user.last_latitude), Number(user.last_longitude)]
     : hasZone
     ? [Number(user.zone_center_lat), Number(user.zone_center_lng)]
-    : [34.4367, 35.8362];
+    : [34.4367, 35.8362]; // Tripoli-ish fallback
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-      {/* Modal surface uses card → same tokens as dashboard cards */}
-      <div className="card w-full max-w-5xl h-[80vh] p-4 md:p-6 mx-3 md:mx-0 flex flex-col border border-slate-700">
-        {/* Header: title + close button */}
-        <div className="flex items-center justify-between mb-2">
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 px-3">
+      <div className="card w-full max-w-5xl h-[80vh] p-4 md:p-6 flex flex-col border border-[hsl(var(--border))]">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3 mb-2">
           <div>
             <h3 className="text-lg font-semibold">
               Track{" "}
-              <span className="text-emerald-400 font-semibold">
+              <span className="font-semibold text-[hsl(var(--primary))]">
                 @{user.username}
               </span>
             </h3>
-            <p className="text-xs text-slate-400 mt-1">
+            <p className="text-xs mt-1 text-[hsl(var(--muted-foreground))]">
               Showing last reported position from the mobile app.
             </p>
+            {!hasLast && (
+              <p className="text-[11px] mt-1 text-[hsl(var(--muted-foreground))]">
+                No last location yet — showing zone center (if assigned).
+              </p>
+            )}
           </div>
 
           <button
@@ -80,8 +83,8 @@ export default function UserTrackModal({ user, onClose }: Props) {
           </button>
         </div>
 
-        {/* Map container – fills the remaining height */}
-        <div className="flex-1 rounded-2xl overflow-hidden border border-slate-700 mt-3">
+        {/* Map */}
+        <div className="flex-1 rounded-2xl overflow-hidden border border-[hsl(var(--border))] mt-3">
           <MapContainer
             center={center as LatLngExpression}
             zoom={15}

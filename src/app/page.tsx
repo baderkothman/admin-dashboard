@@ -6,7 +6,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-
   const from = searchParams.get("from") || "/dashboard";
 
   const [username, setUsername] = useState("");
@@ -17,6 +16,7 @@ export default function LoginPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (loading) return;
 
     setError("");
     setLoading(true);
@@ -32,16 +32,17 @@ export default function LoginPage() {
       try {
         data = (await res.json()) as typeof data;
       } catch {
-        // ignore JSON parse errors
+        // ignore
       }
 
       if (!res.ok || !data.success) {
         setError(data.message || "Login failed");
-      } else {
-        window.localStorage.setItem("adminAuth", "true");
-        window.localStorage.setItem("adminUsername", username);
-        router.push(from || "/dashboard");
+        return;
       }
+
+      window.localStorage.setItem("adminAuth", "true");
+      window.localStorage.setItem("adminUsername", username);
+      router.push(from || "/dashboard");
     } catch (err) {
       console.error(err);
       setError("Something went wrong");
@@ -51,69 +52,134 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex items-center justify-center px-4">
-      <div className="card w-full max-w-md p-8">
+    <div className="min-h-screen flex items-center justify-center px-4 py-10 bg-[var(--surface-root)] text-[hsl(var(--foreground))]">
+      <div className="card w-full max-w-md p-6 sm:p-8">
         <div className="mb-6 text-center">
-          <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
+          <p className="text-[11px] uppercase tracking-[0.22em] text-[hsl(var(--muted-foreground))]">
             Geofence Admin
           </p>
+
           <h1 className="mt-2 text-2xl font-semibold tracking-tight">
             Admin Dashboard
           </h1>
-          <p className="mt-1 text-xs text-slate-500">
+
+          <p className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">
             Sign in to manage zones, users and live alerts.
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4" autoComplete="off">
-          {/* Username field */}
+          {/* Username */}
           <div>
-            <label className="block text-xs font-medium mb-1.5">Username</label>
-            <div className="input-shell">
+            <label
+              htmlFor="username"
+              className="block text-xs font-medium mb-1.5 text-[hsl(var(--foreground))]"
+            >
+              Username
+            </label>
+
+            <div
+              className="
+                flex items-center gap-2 rounded-full px-4 py-3
+                border border-[hsl(var(--border))]
+                bg-[hsl(var(--popover))]
+                shadow-[var(--shadow-soft)]
+                transition
+                focus-within:border-[hsl(var(--ring))]
+                focus-within:ring-4 focus-within:ring-[hsl(var(--ring)/0.25)]
+              "
+            >
               <input
-                className="bg-transparent outline-none text-sm"
+                id="username"
+                name="username"
+                className="
+                  w-full bg-transparent outline-none text-sm
+                  placeholder:text-[hsl(var(--muted-foreground))]
+                "
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 autoComplete="username"
                 placeholder="admin"
+                required
               />
             </div>
           </div>
 
-          {/* Password field with show/hide toggle */}
+          {/* Password */}
           <div>
-            <label className="block text-xs font-medium mb-1.5">Password</label>
-            <div className="input-shell">
+            <label
+              htmlFor="password"
+              className="block text-xs font-medium mb-1.5 text-[hsl(var(--foreground))]"
+            >
+              Password
+            </label>
+
+            <div
+              className="
+                flex items-center gap-2 rounded-full px-4 py-3
+                border border-[hsl(var(--border))]
+                bg-[hsl(var(--popover))]
+                shadow-[var(--shadow-soft)]
+                transition
+                focus-within:border-[hsl(var(--ring))]
+                focus-within:ring-4 focus-within:ring-[hsl(var(--ring)/0.25)]
+              "
+            >
               <input
+                id="password"
+                name="password"
                 type={showPassword ? "text" : "password"}
-                className="bg-transparent outline-none text-sm"
+                className="
+                  w-full bg-transparent outline-none text-sm
+                  placeholder:text-[hsl(var(--muted-foreground))]
+                "
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete="current-password"
                 placeholder="••••••••"
+                required
               />
+
               <button
                 type="button"
                 onClick={() => setShowPassword((p) => !p)}
-                className="text-[11px] text-slate-400 hover:text-slate-200"
+                className="
+                  shrink-0 btn-base btn-ghost
+                  py-1 px-3 text-[11px]
+                "
+                aria-label={showPassword ? "Hide password" : "Show password"}
               >
                 {showPassword ? "Hide" : "Show"}
               </button>
             </div>
           </div>
 
-          {/* Error message (if any) */}
+          {/* Error */}
           {error && (
-            <p className="text-sm text-red-400 bg-red-950/40 border border-red-700 px-3 py-2 rounded-lg">
+            <p
+              role="alert"
+              className="
+                text-sm rounded-2xl border px-3 py-2
+                border-[hsl(var(--danger)/0.35)]
+                bg-[hsl(var(--danger)/0.12)]
+                text-[hsl(var(--danger))]
+              "
+            >
               {error}
             </p>
           )}
 
-          {/* Submit button */}
+          {/* Submit */}
           <button
             type="submit"
             disabled={loading}
-            className="btn-base btn-primary w-full mt-2"
+            className="
+              btn-base w-full mt-2 disabled:opacity-60 disabled:cursor-not-allowed
+              bg-[hsl(var(--primary))]
+              text-[hsl(var(--primary-foreground))]
+              shadow-[var(--shadow-card)]
+              hover:bg-[hsl(var(--primary)/0.92)]
+            "
           >
             {loading ? "Logging in..." : "Login"}
           </button>
