@@ -1,12 +1,10 @@
-// src/context/ThemeContext.tsx
 "use client";
 
-/* eslint-disable react-hooks/set-state-in-effect */
-
-import {
+import React, {
   createContext,
   useContext,
   useEffect,
+  useMemo,
   useState,
   ReactNode,
 } from "react";
@@ -15,10 +13,10 @@ type ThemeMode = "light" | "dark" | "system";
 type ResolvedTheme = "light" | "dark";
 
 interface ThemeContextValue {
-  mode: ThemeMode; // stored preference: light / dark / system
-  resolvedTheme: ResolvedTheme; // actual active theme
+  mode: ThemeMode; // stored preference
+  resolvedTheme: ResolvedTheme; // actual applied theme
   setMode: (mode: ThemeMode) => void;
-  cycleMode: () => void; // system → light → dark → system
+  cycleMode: () => void;
 }
 
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
@@ -26,71 +24,63 @@ const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 const STORAGE_KEY = "admin-theme";
 
 function getPreferredSystemTheme(): ResolvedTheme {
-  if (typeof window === "undefined" || !window.matchMedia) {
-    return "dark";
-  }
+  if (typeof window === "undefined" || !window.matchMedia) return "dark";
   return window.matchMedia("(prefers-color-scheme: dark)").matches
     ? "dark"
     : "light";
 }
 
+function readStoredMode(): ThemeMode {
+  if (typeof window === "undefined") return "system";
+  const stored = window.localStorage.getItem(STORAGE_KEY);
+  return stored === "light" || stored === "dark" || stored === "system"
+    ? stored
+    : "system";
+}
+
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  // IMPORTANT: same initial values on server and client → no hydration mismatch
-  const [mode, setModeState] = useState<ThemeMode>("system");
-  const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>("dark");
-  const [mounted, setMounted] = useState(false);
+  const [mode, setMode] = useState<ThemeMode>(() => readStoredMode());
 
-  // Initial sync (runs only on client)
+  const [systemTheme, setSystemTheme] = useState<ResolvedTheme>(() =>
+    getPreferredSystemTheme()
+  );
+
+  const resolvedTheme = useMemo<ResolvedTheme>(() => {
+    return mode === "system" ? systemTheme : mode;
+  }, [mode, systemTheme]);
+
   useEffect(() => {
-    let initialMode: ThemeMode = "system";
+    if (typeof window === "undefined" || !window.matchMedia) return;
 
-    if (typeof window !== "undefined") {
-      const stored = window.localStorage.getItem(STORAGE_KEY);
-      if (stored === "light" || stored === "dark" || stored === "system") {
-        initialMode = stored;
-      }
+    const mql = window.matchMedia("(prefers-color-scheme: dark)");
+
+    const handler = (e: MediaQueryListEvent) => {
+      setSystemTheme(e.matches ? "dark" : "light");
+    };
+
+    if (typeof mql.addEventListener === "function") {
+      mql.addEventListener("change", handler);
+      return () => mql.removeEventListener("change", handler);
     }
 
-    const systemTheme = getPreferredSystemTheme();
-    const effective =
-      initialMode === "system" ? systemTheme : (initialMode as ResolvedTheme);
-
-    setModeState(initialMode);
-    setResolvedTheme(effective);
-
-    if (typeof document !== "undefined") {
-      document.documentElement.setAttribute("data-theme", effective);
-    }
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(STORAGE_KEY, initialMode);
-    }
-
-    setMounted(true);
+    mql.addListener(handler);
+    return () => {
+      mql.removeListener(handler);
+    };
   }, []);
 
-  // When mode changes after mount → recompute and apply
   useEffect(() => {
-    if (!mounted) return;
+    if (typeof document === "undefined") return;
+    document.documentElement.setAttribute("data-theme", resolvedTheme);
+  }, [resolvedTheme]);
 
-    const systemTheme = getPreferredSystemTheme();
-    const effective = mode === "system" ? systemTheme : (mode as ResolvedTheme);
-
-    setResolvedTheme(effective);
-
-    if (typeof document !== "undefined") {
-      document.documentElement.setAttribute("data-theme", effective);
-    }
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(STORAGE_KEY, mode);
-    }
-  }, [mode, mounted]);
-
-  const setMode = (next: ThemeMode) => {
-    setModeState(next);
-  };
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(STORAGE_KEY, mode);
+  }, [mode]);
 
   const cycleMode = () => {
-    setModeState((prev) => {
+    setMode((prev) => {
       if (prev === "system") return "light";
       if (prev === "light") return "dark";
       return "system";
@@ -111,8 +101,6 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
 export function useTheme() {
   const ctx = useContext(ThemeContext);
-  if (!ctx) {
-    throw new Error("useTheme must be used within ThemeProvider");
-  }
+  if (!ctx) throw new Error("useTheme must be used within ThemeProvider");
   return ctx;
 }

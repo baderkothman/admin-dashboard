@@ -1,5 +1,3 @@
-// src/app/api/user-login/route.ts
-
 import { NextRequest, NextResponse } from "next/server";
 import { getDB } from "@/lib/db";
 import bcrypt from "bcrypt";
@@ -124,11 +122,9 @@ export async function POST(req: NextRequest) {
 
     const user = result.rows[0];
 
-    // Password verification + migration to bcrypt
     let passwordMatches = false;
 
     if (user.password_hash === trimmedPassword) {
-      // Legacy plain-text
       passwordMatches = true;
 
       const newHash = await bcrypt.hash(trimmedPassword, 12);
@@ -137,7 +133,6 @@ export async function POST(req: NextRequest) {
         user.id,
       ]);
     } else {
-      // Bcrypt
       passwordMatches = await bcrypt.compare(
         trimmedPassword,
         user.password_hash

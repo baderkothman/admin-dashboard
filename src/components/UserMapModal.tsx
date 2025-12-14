@@ -108,9 +108,6 @@ export default function UserMapModal({
     map.setView([centerLat, centerLng], map.getZoom() || 15);
   }, [centerLat, centerLng]);
 
-  // ─────────────────────────────────────────────
-  // Search (Nominatim)
-  // ─────────────────────────────────────────────
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     const q = searchQuery.trim();
@@ -153,9 +150,6 @@ export default function UserMapModal({
     if (map) map.setView([latNum, lonNum], 16);
   };
 
-  // ─────────────────────────────────────────────
-  // Save / Clear
-  // ─────────────────────────────────────────────
   const handleSave = async () => {
     setSaveError(null);
 
@@ -241,7 +235,7 @@ export default function UserMapModal({
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-3">
       <div className="card w-full max-w-6xl h-[80vh] flex flex-col border border-[hsl(var(--border))]">
-        {/* Top bar */}
+        {}
         <div className="flex items-center justify-end px-4 py-3 border-b border-[hsl(var(--border))]">
           <button
             onClick={onClose}
@@ -253,12 +247,12 @@ export default function UserMapModal({
           </button>
         </div>
 
-        {/* Main grid */}
+        {}
         <div className="flex-1 px-4 md:px-6 py-4">
           <div className="grid grid-cols-1 md:grid-cols-[1fr_2fr] gap-4 md:gap-6 h-full">
-            {/* MAP + SEARCH */}
+            {}
             <div className="order-1 md:order-2 flex flex-col h-full">
-              {/* Search */}
+              {}
               <form
                 onSubmit={handleSearch}
                 className="mb-3 flex items-center gap-2"
@@ -317,7 +311,7 @@ export default function UserMapModal({
                 </div>
               )}
 
-              {/* Map */}
+              {}
               <div className="flex-1 rounded-2xl border border-[hsl(var(--border))] overflow-hidden">
                 <div className="h-64 md:h-full">
                   <MapContainer
@@ -350,10 +344,10 @@ export default function UserMapModal({
               </div>
             </div>
 
-            {/* CONTROLS */}
+            {}
             <div className="order-2 md:order-1 flex flex-col justify-between mt-4 md:mt-0">
               <div className="space-y-6">
-                {/* Title */}
+                {}
                 <div>
                   <h2 className="text-lg font-semibold">
                     Assign Zone for{" "}
@@ -368,7 +362,7 @@ export default function UserMapModal({
                   )}
                 </div>
 
-                {/* Lat/Lng */}
+                {}
                 <div className="space-y-1 text-sm">
                   <p className="text-[hsl(var(--foreground))]">Latitude</p>
                   <p className="text-xs font-mono text-[hsl(var(--primary))]">
@@ -383,7 +377,7 @@ export default function UserMapModal({
                   </p>
                 </div>
 
-                {/* Radius */}
+                {}
                 <div className="mt-4">
                   <p className="text-sm font-medium mb-2">Radius</p>
                   <input
@@ -401,7 +395,7 @@ export default function UserMapModal({
                 </div>
               </div>
 
-              {/* Actions */}
+              {}
               <div className="mt-6 space-y-2">
                 {saveError && (
                   <p

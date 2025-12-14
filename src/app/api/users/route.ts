@@ -1,5 +1,3 @@
-// src/app/api/users/route.ts
-
 import { NextRequest, NextResponse } from "next/server";
 import { getDB } from "@/lib/db";
 import bcrypt from "bcrypt";
@@ -72,14 +70,12 @@ export async function GET() {
           username: r.username,
           role: r.role,
 
-          // name + contact
           first_name: r.first_name,
           last_name: r.last_name,
           full_name: fullName || null,
           email: r.email,
           phone: r.phone ?? null,
 
-          // zone config
           zone_center_lat:
             r.zone_center_lat !== null ? Number(r.zone_center_lat) : null,
           zone_center_lng:
@@ -88,7 +84,6 @@ export async function GET() {
             r.zone_radius_m !== null ? Number(r.zone_radius_m) : null,
           created_at: r.created_at,
 
-          // last known location
           last_latitude:
             r.last_latitude !== null ? Number(r.last_latitude) : null,
           last_longitude:
@@ -158,7 +153,6 @@ export async function POST(req: NextRequest) {
 
     const db = getDB();
 
-    // PostgreSQL: use RETURNING to get new id
     const result = await db.query<{ id: number }>(
       `
         INSERT INTO users 

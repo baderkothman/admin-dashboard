@@ -1,5 +1,3 @@
-// src/app/api/alerts/route.ts
-
 import { NextRequest, NextResponse } from "next/server";
 import { getDB } from "@/lib/db";
 
@@ -71,9 +69,6 @@ export async function GET(req: NextRequest) {
     const result = await db.query<AlertRow>(sql, params);
     const rows = result.rows;
 
-    // ─────────────────────────────────────────────
-    // CSV MODE
-    // ─────────────────────────────────────────────
     if (format === "csv") {
       const header =
         "id,user_id,username,alert_type,occurred_at,latitude,longitude\n";
@@ -100,9 +95,6 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // ─────────────────────────────────────────────
-    // JSON MODE
-    // ─────────────────────────────────────────────
     const json = rows.map((r: AlertRow) => ({
       id: r.id,
       user_id: r.user_id,

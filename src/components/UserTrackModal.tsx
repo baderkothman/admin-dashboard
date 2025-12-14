@@ -56,7 +56,7 @@ export default function UserTrackModal({ user, onClose }: Props) {
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 px-3">
       <div className="card w-full max-w-5xl h-[80vh] p-4 md:p-6 flex flex-col border border-[hsl(var(--border))]">
-        {/* Header */}
+        {}
         <div className="flex items-start justify-between gap-3 mb-2">
           <div>
             <h3 className="text-lg font-semibold">
@@ -83,7 +83,7 @@ export default function UserTrackModal({ user, onClose }: Props) {
           </button>
         </div>
 
-        {/* Map */}
+        {}
         <div className="flex-1 rounded-2xl overflow-hidden border border-[hsl(var(--border))] mt-3">
           <MapContainer
             center={center as LatLngExpression}

@@ -107,7 +107,7 @@
     color: white;
   }
 
-  /* Scrollbar */
+
   ::-webkit-scrollbar {
     width: 8px;
     height: 8px;
@@ -135,7 +135,7 @@
     overflow: hidden;
   }
 
-  /* Page header (sticky) — theme-aware, NOT white in dark mode */
+
   .dashboard-topbar {
     background: hsl(var(--background) / 0.86);
     backdrop-filter: blur(10px);
@@ -143,13 +143,13 @@
     border-color: hsl(var(--border));
   }
 
-  /* In dark mode: header text should be clearly “white-ish” */
+
   :root[data-theme="dark"] .dashboard-topbar h1,
   .dark .dashboard-topbar h1 {
     color: hsl(var(--foreground));
   }
 
-  /* Buttons */
+
   .btn-base {
     display: inline-flex;
     align-items: center;
@@ -164,15 +164,15 @@
     transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease, transform 0.12s ease;
   }
 
-  /* IMPORTANT: don’t force 100% width on mobile (this was breaking your header) */
-  /* (Use w-full on specific buttons in JSX when you want full width) */
+
+
 
   .btn-base:focus-visible {
     outline: none;
     box-shadow: 0 0 0 1px hsl(var(--ring)), 0 0 0 4px hsl(var(--ring) / 0.35);
   }
 
-  /* Ghost = the “header pills” style (light in light mode, dark in dark mode) */
+
   .btn-ghost {
     background: hsl(var(--card));
     color: hsl(var(--foreground));
@@ -185,7 +185,7 @@
     transform: translateY(-1px);
   }
 
-  /* Strong pills (keep your first design look) */
+
   .btn-base.bg-emerald-500,
   .btn-base.bg-emerald-600 {
     background: linear-gradient(135deg, #00c38a, #00b57e);
@@ -220,7 +220,7 @@
     transform: translateY(-1px);
   }
 
-  /* Amber icon pills */
+
   .bg-amber-500 {
     background-color: #ffb300 !important;
     color: #4a3000 !important;
@@ -234,21 +234,21 @@
     transform: translateY(-1px);
   }
 
-  /* Dashboard table */
+
   .dashboard-table {
     width: 100%;
     border-collapse: separate;
     border-spacing: 0;
   }
 
-  /* Table header background should follow theme (dark stays dark) */
+
   .dashboard-thead {
     background: hsl(var(--card));
     border-color: hsl(var(--border));
     box-shadow: inset 0 -1px 0 hsl(var(--border));
   }
 
-  /* In dark mode: table header text “white-ish” */
+
   :root[data-theme="dark"] .dashboard-thead th,
   .dark .dashboard-thead th {
     color: hsl(var(--foreground));
@@ -272,17 +272,17 @@
     background: hsl(var(--surface));
   }
 
-  /* Hover that NEVER hides text */
+
   .dashboard-table tbody tr:hover td {
     background: hsl(var(--secondary) / 0.75);
   }
 
-  /* Make “divide-y” use theme border */
+
   .dashboard-table tbody tr+tr td {
     border-top: 1px solid hsl(var(--border));
   }
 
-  /* Light mode safety: if you use text-slate-100 in JSX, force it readable */
+
   :root[data-theme="light"] .text-slate-50,
   :root[data-theme="light"] .text-slate-100,
   :root[data-theme="light"] .text-slate-200 {
@@ -294,7 +294,7 @@
     color: hsl(var(--muted-foreground)) !important;
   }
 
-  /* Mobile tweaks */
+
   @media (max-width: 640px) {
     .card {
       border-radius: 1rem;

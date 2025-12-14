@@ -1,5 +1,3 @@
-// src/app/api/logout/route.ts
-
 import { NextResponse } from "next/server";
 
 /**
@@ -43,17 +41,8 @@ export const runtime = "nodejs";
  */
 export async function POST() {
   try {
-    // At this stage:
-    // - No session store
-    // - No cookies to clear
-    // - No DB calls required
-    //
-    // So we simply acknowledge the logout request as successful.
     return NextResponse.json({ success: true });
   } catch (err) {
-    // If anything unexpected happens in the future when this function
-    // becomes more complex (e.g. DB / session cleanup fails), we log
-    // the error for debugging and return a generic 500 to the client.
     console.error("POST /api/logout error:", err);
 
     return NextResponse.json(

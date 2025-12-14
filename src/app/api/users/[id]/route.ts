@@ -1,5 +1,3 @@
-// src/app/api/users/[id]/route.ts
-
 import { NextRequest, NextResponse } from "next/server";
 import { getDB } from "@/lib/db";
 

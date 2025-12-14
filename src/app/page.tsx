@@ -31,9 +31,7 @@ export default function LoginPage() {
       let data: { success?: boolean; message?: string } = {};
       try {
         data = (await res.json()) as typeof data;
-      } catch {
-        // ignore
-      }
+      } catch {}
 
       if (!res.ok || !data.success) {
         setError(data.message || "Login failed");
@@ -69,7 +67,7 @@ export default function LoginPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4" autoComplete="off">
-          {/* Username */}
+          {}
           <div>
             <label
               htmlFor="username"
@@ -105,7 +103,7 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {/* Password */}
+          {}
           <div>
             <label
               htmlFor="password"
@@ -154,7 +152,7 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {/* Error */}
+          {}
           {error && (
             <p
               role="alert"
@@ -169,7 +167,7 @@ export default function LoginPage() {
             </p>
           )}
 
-          {/* Submit */}
+          {}
           <button
             type="submit"
             disabled={loading}

@@ -14,7 +14,6 @@ import {
 } from "react-icons/fa";
 import ThemeToggle from "@/components/ThemeToggle";
 
-// Leaflet-based modals (client-only)
 const UserMapModal = dynamic(() => import("@/components/UserMapModal"), {
   ssr: false,
 });
@@ -109,18 +108,14 @@ function writeDashboardTableState(state: DashboardTableState) {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(DASH_TABLE_STATE_KEY, JSON.stringify(state));
-  } catch {
-    // ignore
-  }
+  } catch {}
 }
 
 function clearDashboardTableState() {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.removeItem(DASH_TABLE_STATE_KEY);
-  } catch {
-    // ignore
-  }
+  } catch {}
 }
 
 /* ─────────────────────────────────────────────
@@ -208,7 +203,6 @@ const PAGE_SIZE = 15;
 const DashboardPage: React.FC = () => {
   const router = useRouter();
 
-  // Data
   const [users, setUsers] = useState<User[] | null>(null); // null = loading
   const [usersError, setUsersError] = useState<string | null>(null);
 
@@ -222,17 +216,13 @@ const DashboardPage: React.FC = () => {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [alertsOpen, setAlertsOpen] = useState(false);
 
-  // Ref for bell + popup (for click-outside)
   const alertsRef = useRef<HTMLDivElement | null>(null);
 
-  // Sorting
   const [sortKey, setSortKey] = useState<SortKey>("full_name");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
 
-  // Pagination
   const [currentPage, setCurrentPage] = useState(1);
 
-  // IMPORTANT: skip the very first persist effect to avoid overwriting saved state with defaults
   const skipFirstPersistRef = useRef(true);
 
   /* ─────────────────────────────────────────────
@@ -242,7 +232,6 @@ const DashboardPage: React.FC = () => {
     const saved = readDashboardTableState();
     if (!saved) return;
 
-    // Only set if different (avoids extra renders)
     setSortKey((prev) => (prev === saved.sortKey ? prev : saved.sortKey));
     setSortDirection((prev) =>
       prev === saved.sortDirection ? prev : saved.sortDirection
@@ -304,7 +293,6 @@ const DashboardPage: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Keep tracking modal user in sync with updated list
   useEffect(() => {
     if (!selectedUserForTrack || users === null) return;
     const updated = users.find((u) => u.id === selectedUserForTrack.id);
@@ -343,9 +331,7 @@ const DashboardPage: React.FC = () => {
         } else {
           setAlerts(data);
         }
-      } catch {
-        // non-critical
-      }
+      } catch {}
     };
 
     fetchAlerts();
@@ -446,7 +432,6 @@ const DashboardPage: React.FC = () => {
     return list;
   }, [users, sortKey, sortDirection]);
 
-  // Keep current page in range when list changes
   useEffect(() => {
     if (!sortedUsers) return;
     const total = sortedUsers.length;
@@ -472,16 +457,13 @@ const DashboardPage: React.FC = () => {
   const handleLogout = async () => {
     try {
       await fetch("/api/logout", { method: "POST" });
-    } catch {
-      // ignore
-    }
+    } catch {}
 
     if (typeof window !== "undefined") {
       localStorage.removeItem("adminAuth");
       localStorage.removeItem("adminUsername");
     }
 
-    // Optional: clear saved table state on logout
     clearDashboardTableState();
 
     router.replace("/");
@@ -526,7 +508,7 @@ const DashboardPage: React.FC = () => {
 
   return (
     <main className="min-h-screen bg-[var(--surface-root)] text-[hsl(var(--foreground))] flex flex-col">
-      {/* Top bar */}
+      {}
       <header
         className="
           dashboard-topbar
@@ -550,7 +532,7 @@ const DashboardPage: React.FC = () => {
         <div className="flex items-center gap-3 sm:gap-4">
           <ThemeToggle />
 
-          {/* Alerts bell + popup */}
+          {}
           <div className="relative" ref={alertsRef}>
             <button
               type="button"
@@ -633,7 +615,7 @@ const DashboardPage: React.FC = () => {
             )}
           </div>
 
-          {/* Logout */}
+          {}
           <button
             onClick={handleLogout}
             className="btn-base btn-ghost rounded-full text-xs sm:text-sm"
@@ -643,10 +625,10 @@ const DashboardPage: React.FC = () => {
         </div>
       </header>
 
-      {/* Main content */}
+      {}
       <section className="flex-1 px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
         <div className="card">
-          {/* Card header */}
+          {}
           <div className="px-4 sm:px-6 py-3 border-b border-[hsl(var(--border))] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <div>
               <p className="text-sm font-medium">Users Overview</p>
@@ -657,7 +639,7 @@ const DashboardPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Table wrapper */}
+          {}
           <div className="scroll-x hide-scrollbar">
             <div className="overflow-x-auto max-h-[calc(100vh-260px)]">
               <table className="dashboard-table min-w-full table-fixed text-sm">
@@ -724,7 +706,7 @@ const DashboardPage: React.FC = () => {
                 </thead>
 
                 <tbody>
-                  {/* Loading */}
+                  {}
                   {users === null && !usersError && (
                     <tr>
                       <td
@@ -736,7 +718,7 @@ const DashboardPage: React.FC = () => {
                     </tr>
                   )}
 
-                  {/* Error */}
+                  {}
                   {usersError && (
                     <tr>
                       <td
@@ -748,7 +730,7 @@ const DashboardPage: React.FC = () => {
                     </tr>
                   )}
 
-                  {/* No users */}
+                  {}
                   {users !== null && !usersError && users.length === 0 && (
                     <tr>
                       <td
@@ -761,7 +743,7 @@ const DashboardPage: React.FC = () => {
                     </tr>
                   )}
 
-                  {/* Data rows */}
+                  {}
                   {users !== null &&
                     !usersError &&
                     users.length > 0 &&
@@ -771,7 +753,7 @@ const DashboardPage: React.FC = () => {
 
                       return (
                         <tr key={user.id} className="transition-colors">
-                          {/* Full Name */}
+                          {}
                           <td className="px-4 sm:px-6 py-2.5 whitespace-nowrap align-top w-[220px]">
                             <div className="text-sm truncate">
                               {user.full_name || "—"}
@@ -781,17 +763,17 @@ const DashboardPage: React.FC = () => {
                             </div>
                           </td>
 
-                          {/* Username */}
+                          {}
                           <td className="px-4 sm:px-6 py-2.5 whitespace-nowrap w-[160px] truncate">
                             {user.username}
                           </td>
 
-                          {/* Contact */}
+                          {}
                           <td className="px-4 sm:px-6 py-2.5 whitespace-nowrap w-[200px] truncate text-[hsl(var(--muted-foreground))]">
                             {formatContact(user)}
                           </td>
 
-                          {/* Assigned Zone */}
+                          {}
                           <td className="px-4 sm:px-6 py-2.5 w-[170px]">
                             <button
                               type="button"
@@ -807,7 +789,7 @@ const DashboardPage: React.FC = () => {
                             )}
                           </td>
 
-                          {/* Status */}
+                          {}
                           <td className="px-4 sm:px-6 py-2.5 w-[150px]">
                             {zoneAssigned ? (
                               <div className="text-xs font-semibold">
@@ -840,7 +822,7 @@ const DashboardPage: React.FC = () => {
                             )}
                           </td>
 
-                          {/* Track */}
+                          {}
                           <td className="px-4 sm:px-6 py-2.5 text-center w-[110px]">
                             <button
                               type="button"
@@ -851,7 +833,7 @@ const DashboardPage: React.FC = () => {
                             </button>
                           </td>
 
-                          {/* Logs */}
+                          {}
                           <td className="px-4 sm:px-6 py-2.5 text-center w-[110px]">
                             <div className="flex items-center justify-center gap-2">
                               <button
@@ -881,7 +863,7 @@ const DashboardPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Pagination footer */}
+          {}
           {sortedUsers && sortedUsers.length > 0 && (
             <div className="px-4 sm:px-6 py-3 border-t border-[hsl(var(--border))] flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-[hsl(var(--muted-foreground))]">
               <span>
@@ -933,7 +915,7 @@ const DashboardPage: React.FC = () => {
         </div>
       </section>
 
-      {/* Zone modal */}
+      {}
       {selectedUserForZone && (
         <UserMapModal
           user={selectedUserForZone}
@@ -952,7 +934,7 @@ const DashboardPage: React.FC = () => {
         />
       )}
 
-      {/* Track modal */}
+      {}
       {selectedUserForTrack && (
         <UserTrackModal
           user={selectedUserForTrack}

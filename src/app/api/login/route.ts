@@ -41,7 +41,6 @@ export async function POST(req: NextRequest) {
 
     const db = getDB();
 
-    // PostgreSQL: use $1 for placeholder, and result.rows
     const result = await db.query<AdminRow>(
       `
         SELECT id, username, password_hash, role
@@ -66,18 +65,15 @@ export async function POST(req: NextRequest) {
 
     let ok = false;
 
-    // Detect if stored password looks like a bcrypt hash
     const looksHashed =
       stored.startsWith("$2a$") ||
       stored.startsWith("$2b$") ||
       stored.startsWith("$2y$");
 
     if (!looksHashed) {
-      // LEGACY: plain-text password in DB
       if (stored === trimmedPassword) {
         ok = true;
 
-        // Migrate to bcrypt in the background
         try {
           const newHash = await bcrypt.hash(trimmedPassword, 12);
           await db.query("UPDATE users SET password_hash = $1 WHERE id = $2", [
@@ -93,7 +89,6 @@ export async function POST(req: NextRequest) {
         }
       }
     } else {
-      // NORMAL: stored is bcrypt hash
       ok = await bcrypt.compare(trimmedPassword, stored);
     }
 
@@ -104,7 +99,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Success – no server-side sessions; frontend handles localStorage
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error("POST /api/login error:", err);

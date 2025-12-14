@@ -77,7 +77,7 @@ export default function LogsPage() {
 
   return (
     <div className="min-h-screen bg-[var(--surface-root)] text-[hsl(var(--foreground))]">
-      {/* Top bar */}
+      {}
       <header className="dashboard-topbar px-4 sm:px-6 lg:px-8 py-3 sm:py-4 border-b">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -120,7 +120,7 @@ export default function LogsPage() {
         </div>
       </header>
 
-      {/* Main content */}
+      {}
       <main className="p-4 sm:p-6 lg:p-8">
         <div className="card p-4 sm:p-6">
           {error && (
@@ -161,7 +161,6 @@ export default function LogsPage() {
                     const label =
                       a.alert_type === "exit" ? "Exited zone" : "Entered zone";
 
-                    // Use theme tokens instead of slate/red/emerald classes
                     const badgeStyle =
                       a.alert_type === "exit"
                         ? "text-[hsl(var(--danger))]"

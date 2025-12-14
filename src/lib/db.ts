@@ -1,5 +1,3 @@
-// src/lib/db.ts
-
 import { Pool } from "pg";
 
 let pool: Pool | null = null;
@@ -17,7 +15,6 @@ export function getDB(): Pool {
       database: process.env.DB_NAME,
     });
 
-    // Optional: tiny debug log (without password)
     console.log("📡 Connecting to Postgres with:", {
       host: process.env.DB_HOST,
       port: process.env.DB_PORT,
