@@ -1,9 +1,14 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-interface Alert {
+import { DataTable } from "primereact/datatable";
+import { Column } from "primereact/column";
+import { InputText } from "primereact/inputtext";
+
+type Alert = {
   id: number;
   user_id: number;
   username: string;
@@ -11,7 +16,7 @@ interface Alert {
   occurred_at: string;
   latitude: number | null;
   longitude: number | null;
-}
+};
 
 export default function LogsPage() {
   const searchParams = useSearchParams();
@@ -22,11 +27,12 @@ export default function LogsPage() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [globalFilter, setGlobalFilter] = useState("");
 
   useEffect(() => {
     if (!userIdParam) return;
 
-    let isCancelled = false;
+    let cancelled = false;
 
     async function load(showSpinner: boolean) {
       try {
@@ -35,165 +41,152 @@ export default function LogsPage() {
           setError("");
         }
 
-        const res = await fetch(`/api/alerts?userId=${userIdParam}`);
+        const res = await fetch(`/api/alerts?userId=${userIdParam}`, {
+          cache: "no-store",
+        });
         if (!res.ok) throw new Error("Failed to load logs");
 
         const data = (await res.json()) as Alert[];
-        if (!isCancelled) setAlerts(data);
-      } catch (e) {
-        console.error(e);
-        if (!isCancelled) setError("Failed to load logs");
+        if (!cancelled) setAlerts(data);
+      } catch {
+        if (!cancelled) setError("Failed to load logs");
       } finally {
-        if (!isCancelled && showSpinner) setLoading(false);
+        if (!cancelled && showSpinner) setLoading(false);
       }
     }
 
     load(true);
-
-    const intervalId = window.setInterval(() => {
-      load(false);
-    }, 5000);
+    const id = window.setInterval(() => load(false), 5000);
 
     return () => {
-      isCancelled = true;
-      window.clearInterval(intervalId);
+      cancelled = true;
+      window.clearInterval(id);
     };
   }, [userIdParam]);
 
   const username = alerts[0]?.username;
-  const userId =
-    userIdParam ?? (alerts[0]?.user_id ? String(alerts[0].user_id) : null);
-  const userIdText = userId ?? "?";
+  const userIdText = userIdParam ?? "?";
+
+  const rows = useMemo(() => {
+    return alerts.map((a) => ({
+      ...a,
+      eventSort: a.alert_type,
+      timeSort: new Date(a.occurred_at).getTime(),
+    }));
+  }, [alerts]);
 
   function handleDownloadCsv() {
-    if (!userId) return;
-    window.open(`/api/alerts?userId=${userId}&format=csv`, "_blank");
+    if (!userIdParam) return;
+    window.open(`/api/alerts?userId=${userIdParam}&format=csv`, "_blank");
   }
 
   function handleBack() {
-    if (userId) router.push(`/dashboard?userId=${userId}`);
-    else router.push("/dashboard");
+    router.push("/dashboard");
   }
 
+  const header = (
+    <div className="px-4 sm:px-6 py-4 border-b border-[hsl(var(--border))] flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+      <div>
+        <p className="text-sm font-semibold">User Logs</p>
+        <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1">
+          User:{" "}
+          {username ? (
+            <>
+              <span className="font-semibold">{username}</span> (ID #
+              {userIdText})
+            </>
+          ) : (
+            <>ID #{userIdText}</>
+          )}
+        </p>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <InputText
+          value={globalFilter}
+          onChange={(e) => setGlobalFilter(e.target.value)}
+          placeholder="Search logs..."
+        />
+        <button
+          onClick={handleDownloadCsv}
+          disabled={!userIdParam || alerts.length === 0}
+          className="btn-base btn-ghost text-xs sm:text-sm"
+        >
+          Download CSV
+        </button>
+        <button
+          onClick={handleBack}
+          className="btn-base text-xs sm:text-sm bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:bg-[hsl(var(--primary)/0.92)]"
+        >
+          Back
+        </button>
+      </div>
+    </div>
+  );
+
+  const eventBody = (a: any) => {
+    const isExit = a.alert_type === "exit";
+    return (
+      <span
+        className={
+          isExit
+            ? "text-[hsl(var(--danger))] font-semibold"
+            : "text-[hsl(var(--success))] font-semibold"
+        }
+      >
+        {isExit ? "Exited zone" : "Entered zone"}
+      </span>
+    );
+  };
+
+  const timeBody = (a: any) => new Date(a.occurred_at).toLocaleString();
+  const latBody = (a: any) =>
+    a.latitude != null ? Number(a.latitude).toFixed(5) : "—";
+  const lngBody = (a: any) =>
+    a.longitude != null ? Number(a.longitude).toFixed(5) : "—";
+
   return (
-    <div className="min-h-screen bg-[var(--surface-root)] text-[hsl(var(--foreground))]">
-      {}
-      <header className="dashboard-topbar px-4 sm:px-6 lg:px-8 py-3 sm:py-4 border-b">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-lg sm:text-xl font-semibold">User Logs</h1>
-            <p className="text-xs mt-1 text-[hsl(var(--muted-foreground))]">
-              User:{" "}
-              {username ? (
-                <>
-                  <span className="font-medium">{username}</span> (ID #
-                  {userIdText})
-                </>
-              ) : (
-                <>ID #{userIdText}</>
-              )}
-            </p>
-          </div>
-
-          <div className="flex flex-col sm:flex-row gap-2">
-            <button
-              onClick={handleDownloadCsv}
-              disabled={!userId || alerts.length === 0}
-              className="btn-base btn-ghost text-xs sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Download CSV
-            </button>
-
-            <button
-              onClick={handleBack}
-              className="
-                btn-base text-xs sm:text-sm
-                bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]
-                shadow-[var(--shadow-soft)]
-                hover:bg-[hsl(var(--primary)/0.92)]
-                border border-transparent
-              "
-            >
-              Back to Dashboard
-            </button>
-          </div>
-        </div>
+    <main className="min-h-screen bg-[var(--surface-root)] text-[hsl(var(--foreground))]">
+      <header className="dashboard-topbar sticky top-0 z-30 px-4 sm:px-6 lg:px-8 py-3 sm:py-4 border-b">
+        <h1 className="text-lg sm:text-xl font-semibold">Logs</h1>
       </header>
 
-      {}
-      <main className="p-4 sm:p-6 lg:p-8">
-        <div className="card p-4 sm:p-6">
+      <section className="px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+        <div className="card">
           {error && (
-            <div
-              className="
-                mb-4 rounded-2xl border px-4 py-2 text-sm
-                border-[hsl(var(--danger)/0.35)]
-                bg-[hsl(var(--danger)/0.12)]
-                text-[hsl(var(--danger))]
-              "
-            >
+            <div className="px-4 sm:px-6 py-3 border-b border-[hsl(var(--border))] text-sm text-[hsl(var(--danger))]">
               {error}
             </div>
           )}
 
-          {loading ? (
-            <p className="text-sm text-[hsl(var(--muted-foreground))]">
-              Loading logs...
-            </p>
-          ) : alerts.length === 0 ? (
-            <p className="text-sm text-[hsl(var(--muted-foreground))]">
-              No logs for this user.
-            </p>
-          ) : (
-            <div className="scroll-x hide-scrollbar">
-              <table className="dashboard-table text-xs">
-                <thead className="dashboard-thead">
-                  <tr>
-                    <th className="text-left py-2 pr-3">Event</th>
-                    <th className="text-left py-2 pr-3">Time</th>
-                    <th className="text-left py-2 pr-3">Latitude</th>
-                    <th className="text-left py-2 pr-3">Longitude</th>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {alerts.map((a) => {
-                    const label =
-                      a.alert_type === "exit" ? "Exited zone" : "Entered zone";
-
-                    const badgeStyle =
-                      a.alert_type === "exit"
-                        ? "text-[hsl(var(--danger))]"
-                        : "text-[hsl(var(--success))]";
-
-                    return (
-                      <tr key={a.id}>
-                        <td className="py-3 pr-3">
-                          <span className={`${badgeStyle} font-semibold`}>
-                            {label}
-                          </span>
-                        </td>
-
-                        <td className="py-3 pr-3 text-[hsl(var(--foreground))]">
-                          {new Date(a.occurred_at).toLocaleString()}
-                        </td>
-
-                        <td className="py-3 pr-3 text-[hsl(var(--foreground))]">
-                          {a.latitude != null ? a.latitude.toFixed(5) : "-"}
-                        </td>
-
-                        <td className="py-3 pr-3 text-[hsl(var(--foreground))]">
-                          {a.longitude != null ? a.longitude.toFixed(5) : "-"}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <DataTable
+            value={rows}
+            dataKey="id"
+            className="dashboard-datatable"
+            header={header}
+            globalFilter={globalFilter}
+            globalFilterFields={["alert_type", "occurred_at", "username"]}
+            paginator
+            paginatorClassName="dashboard-paginator"
+            paginatorTemplate="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink RowsPerPageDropdown"
+            rows={10}
+            rowsPerPageOptions={[10, 25, 50]}
+            emptyMessage={
+              loading ? "Loading logs..." : "No logs for this user."
+            }
+          >
+            <Column
+              header="Event"
+              field="eventSort"
+              body={eventBody}
+              sortable
+            />
+            <Column header="Time" field="timeSort" body={timeBody} sortable />
+            <Column header="Latitude" field="latitude" body={latBody} />
+            <Column header="Longitude" field="longitude" body={lngBody} />
+          </DataTable>
         </div>
-      </main>
-    </div>
+      </section>
+    </main>
   );
 }

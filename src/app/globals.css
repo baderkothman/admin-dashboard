@@ -1,8 +1,7 @@
-@import url("https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap");
 @import "tailwindcss";
 
 /* ─────────────────────────────────────────────
-   THEME TOKENS (Light / Dark) + BASE
+   THEME TOKENS + BASE
    ───────────────────────────────────────────── */
 @layer base {
 
@@ -13,10 +12,7 @@
     --foreground: 200 25% 15%;
 
     --card: 0 0% 100%;
-    --card-foreground: 200 25% 15%;
-
     --popover: 0 0% 100%;
-    --popover-foreground: 200 25% 15%;
 
     --primary: 185 60% 40%;
     --primary-foreground: 0 0% 100%;
@@ -36,7 +32,8 @@
 
     --surface-root: hsl(var(--background));
     --surface: hsl(var(--card));
-    --surface-soft: hsl(200 10% 96%);
+    --surface-soft-hsl: 200 10% 96%;
+    --surface-soft: hsl(var(--surface-soft-hsl));
 
     --shadow-soft: 0 2px 10px rgba(15, 23, 42, 0.06);
     --shadow-card: 0 10px 30px rgba(15, 23, 42, 0.08);
@@ -49,10 +46,7 @@
     --foreground: 220 14% 96%;
 
     --card: 222 47% 13%;
-    --card-foreground: 220 14% 96%;
-
     --popover: 222 47% 13%;
-    --popover-foreground: 220 14% 96%;
 
     --primary: 185 55% 50%;
     --primary-foreground: 222 47% 10%;
@@ -70,9 +64,10 @@
 
     --radius: 1.25rem;
 
-    --surface-root: hsl(222 47% 11%);
-    --surface: hsl(222 47% 13%);
-    --surface-soft: hsl(222 45% 16%);
+    --surface-root: hsl(var(--background));
+    --surface: hsl(var(--card));
+    --surface-soft-hsl: 222 45% 16%;
+    --surface-soft: hsl(var(--surface-soft-hsl));
 
     --shadow-soft: 0 4px 14px rgba(0, 0, 0, 0.4);
     --shadow-card: 0 12px 35px rgba(0, 0, 0, 0.55);
@@ -96,7 +91,8 @@
     min-height: 100vh;
     background: var(--surface-root);
     color: hsl(var(--foreground));
-    font-family: "DM Sans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-family: var(--font-geist-sans), system-ui, -apple-system, "Segoe UI",
+      sans-serif;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
     line-height: 1.5;
@@ -106,7 +102,6 @@
     background: hsl(var(--primary) / 0.22);
     color: white;
   }
-
 
   ::-webkit-scrollbar {
     width: 8px;
@@ -124,32 +119,31 @@
 }
 
 /* ─────────────────────────────────────────────
-   COMPONENTS (Card / Buttons / Dashboard Table)
+   COMPONENTS (Card / Buttons / PrimeReact)
    ───────────────────────────────────────────── */
 @layer components {
+
+  /* Card */
   .card {
-    background: linear-gradient(180deg, hsl(var(--card)) 0%, hsl(var(--card) / 0.92) 100%);
+    background: linear-gradient(180deg,
+        hsl(var(--card)) 0%,
+        hsl(var(--card) / 0.92) 100%);
     border-radius: calc(var(--radius) + 0.5rem);
     border: 1px solid hsl(var(--border));
     box-shadow: var(--shadow-card);
     overflow: hidden;
   }
 
-
+  /* Topbar: SOLID */
   .dashboard-topbar {
-    background: hsl(var(--background) / 0.86);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    border-color: hsl(var(--border));
+    background: hsl(var(--background)) !important;
+    background-image: none !important;
+    border-color: hsl(var(--border)) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
   }
 
-
-  :root[data-theme="dark"] .dashboard-topbar h1,
-  .dark .dashboard-topbar h1 {
-    color: hsl(var(--foreground));
-  }
-
-
+  /* Buttons */
   .btn-base {
     display: inline-flex;
     align-items: center;
@@ -158,20 +152,31 @@
     padding: 0.55rem 1rem;
     border-radius: 999px;
     font-size: 0.85rem;
-    font-weight: 600;
+    font-weight: 700;
     border: 1px solid transparent;
     cursor: pointer;
-    transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease, transform 0.12s ease;
+    transition: background-color 0.18s ease, border-color 0.18s ease,
+      color 0.18s ease, box-shadow 0.18s ease, transform 0.12s ease,
+      filter 0.18s ease;
   }
-
-
-
 
   .btn-base:focus-visible {
     outline: none;
     box-shadow: 0 0 0 1px hsl(var(--ring)), 0 0 0 4px hsl(var(--ring) / 0.35);
   }
 
+  .btn-base:disabled {
+    opacity: 0.45 !important;
+    cursor: not-allowed !important;
+    box-shadow: none !important;
+    transform: none !important;
+    filter: saturate(0.25) contrast(0.95);
+  }
+
+  .btn-base:disabled:hover {
+    transform: none !important;
+    box-shadow: none !important;
+  }
 
   .btn-ghost {
     background: hsl(var(--card));
@@ -185,7 +190,7 @@
     transform: translateY(-1px);
   }
 
-
+  /* Zone button */
   .btn-base.bg-emerald-500,
   .btn-base.bg-emerald-600 {
     background: linear-gradient(135deg, #00c38a, #00b57e);
@@ -201,10 +206,9 @@
     transform: translateY(-1px);
   }
 
+  /* Track button */
   .btn-base.bg-rose-500,
-  .btn-base.bg-rose-600,
-  .btn-base.bg-red-600,
-  .btn-base.bg-red-700 {
+  .btn-base.bg-rose-600 {
     background: linear-gradient(135deg, #ff2f6b, #ff1450);
     color: #fff;
     box-shadow: 0 10px 24px rgba(255, 47, 107, 0.4);
@@ -212,14 +216,20 @@
 
   .btn-base.bg-rose-500:hover,
   .btn-base.bg-rose-600:hover,
-  .btn-base.bg-red-600:hover,
-  .btn-base.bg-red-700:hover,
   .btn-base.hover\:bg-rose-400:hover {
     background: linear-gradient(135deg, #ff427a, #ff2f6b);
     box-shadow: 0 14px 30px rgba(255, 47, 107, 0.6);
     transform: translateY(-1px);
   }
 
+  /* Action icon buttons */
+  .action-icon-btn:disabled {
+    opacity: 0.45 !important;
+    cursor: not-allowed !important;
+    box-shadow: none !important;
+    transform: none !important;
+    filter: saturate(0.25);
+  }
 
   .bg-amber-500 {
     background-color: #ffb300 !important;
@@ -234,74 +244,256 @@
     transform: translateY(-1px);
   }
 
-
-  .dashboard-table {
-    width: 100%;
-    border-collapse: separate;
-    border-spacing: 0;
+  /* Prime: consistent font everywhere */
+  .p-component,
+  .p-component * {
+    font-family: inherit !important;
   }
 
-
-  .dashboard-thead {
-    background: hsl(var(--card));
-    border-color: hsl(var(--border));
-    box-shadow: inset 0 -1px 0 hsl(var(--border));
+  /* Remove Prime header container styling (we provide our own) */
+  .dashboard-datatable.p-datatable .p-datatable-header {
+    padding: 0 !important;
+    background: transparent !important;
+    border: 0 !important;
   }
 
-
-  :root[data-theme="dark"] .dashboard-thead th,
-  .dark .dashboard-thead th {
-    color: hsl(var(--foreground));
+  /* ✅ Kill horizontal scroll (force fit) */
+  .dashboard-datatable .p-datatable-wrapper {
+    overflow-x: hidden !important;
   }
 
-  .dashboard-table thead th {
-    font-size: 0.7rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    font-weight: 700;
-    padding-block: 0.85rem;
-    background: transparent;
-    color: hsl(var(--muted-foreground));
+  .dashboard-datatable .p-datatable-table {
+    width: 100% !important;
+    table-layout: fixed !important;
   }
 
-  .dashboard-table tbody tr:nth-child(even) td {
-    background: hsl(var(--surface-soft) / 0.55);
+  /* Header: solid + consistent */
+  .dashboard-datatable .p-datatable-thead>tr>th {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+
+    background: var(--surface) !important;
+    opacity: 1 !important;
+    border-bottom: 1px solid hsl(var(--border)) !important;
+
+    color: hsl(var(--muted-foreground)) !important;
+    font-size: 0.72rem !important;
+    letter-spacing: 0.08em !important;
+    text-transform: uppercase !important;
+    font-weight: 800 !important;
+
+    padding: 0.85rem 1.1rem !important;
+
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
   }
 
-  .dashboard-table tbody tr:nth-child(odd) td {
-    background: hsl(var(--surface));
+  .dashboard-datatable .p-datatable-thead>tr>th * {
+    font: inherit !important;
+    letter-spacing: inherit !important;
+    text-transform: inherit !important;
+    color: inherit !important;
   }
 
-
-  .dashboard-table tbody tr:hover td {
-    background: hsl(var(--secondary) / 0.75);
-  }
-
-
-  .dashboard-table tbody tr+tr td {
-    border-top: 1px solid hsl(var(--border));
-  }
-
-
-  :root[data-theme="light"] .text-slate-50,
-  :root[data-theme="light"] .text-slate-100,
-  :root[data-theme="light"] .text-slate-200 {
+  /* Body cells (fix dark-mode white rows) */
+  .dashboard-datatable .p-datatable-tbody>tr>td {
+    background: var(--surface) !important;
     color: hsl(var(--foreground)) !important;
+    padding: 0.75rem 1.1rem !important;
+    border-top: 1px solid hsl(var(--border)) !important;
+    vertical-align: top;
+
+    /* prevent width explosion */
+    overflow: hidden !important;
+    overflow-wrap: anywhere !important;
+    word-break: break-word !important;
   }
 
-  :root[data-theme="light"] .text-slate-400,
-  :root[data-theme="light"] .text-slate-500 {
+  .dashboard-datatable .p-datatable-tbody>tr:nth-child(even)>td {
+    background: hsl(var(--surface-soft-hsl) / 0.6) !important;
+  }
+
+  .dashboard-datatable .p-datatable-tbody>tr:hover>td {
+    background: hsl(var(--secondary) / 0.75) !important;
+  }
+
+  /* Search input */
+  .dashboard-datatable .p-inputtext {
+    width: 18rem;
+    border-radius: 999px;
+    background: var(--surface-soft) !important;
+    border: 1px solid hsl(var(--border)) !important;
+    color: hsl(var(--foreground)) !important;
+    padding: 0.62rem 0.95rem !important;
+    box-shadow: var(--shadow-soft);
+  }
+
+  .dashboard-datatable .p-inputtext::placeholder {
     color: hsl(var(--muted-foreground)) !important;
   }
 
+  .dashboard-datatable .p-inputtext:focus {
+    outline: none !important;
+    box-shadow: 0 0 0 1px hsl(var(--ring)),
+      0 0 0 4px hsl(var(--ring) / 0.25) !important;
+  }
+
+  /* Paginator */
+  .dashboard-paginator.p-paginator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+
+    gap: 0.7rem;
+    padding: 0.9rem 1rem;
+
+    border-top: 1px solid hsl(var(--border));
+    background: var(--surface) !important;
+  }
+
+  .dashboard-paginator .p-paginator-pages {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+
+  .dashboard-paginator .p-paginator-first,
+  .dashboard-paginator .p-paginator-prev,
+  .dashboard-paginator .p-paginator-next,
+  .dashboard-paginator .p-paginator-last,
+  .dashboard-paginator .p-paginator-pages .p-paginator-page {
+    border: 1px solid hsl(var(--border)) !important;
+    background: var(--surface-soft) !important;
+    color: hsl(var(--foreground)) !important;
+
+    border-radius: 999px;
+    height: 2.35rem;
+    min-width: 2.35rem;
+    padding: 0 0.85rem;
+
+    box-shadow: var(--shadow-soft);
+    transition: transform 0.12s ease, background-color 0.18s ease,
+      box-shadow 0.18s ease;
+  }
+
+  .dashboard-paginator .p-paginator-first:hover,
+  .dashboard-paginator .p-paginator-prev:hover,
+  .dashboard-paginator .p-paginator-next:hover,
+  .dashboard-paginator .p-paginator-last:hover,
+  .dashboard-paginator .p-paginator-pages .p-paginator-page:hover {
+    background: hsl(var(--muted)) !important;
+    transform: translateY(-1px);
+  }
+
+  .dashboard-paginator .p-paginator-pages .p-paginator-page.p-highlight {
+    background: hsl(var(--primary)) !important;
+    border-color: hsl(var(--primary)) !important;
+    color: hsl(var(--primary-foreground)) !important;
+    box-shadow: 0 12px 26px hsl(var(--primary) / 0.25);
+  }
+
+  .dashboard-paginator .p-disabled,
+  .dashboard-paginator button:disabled {
+    opacity: 0.4;
+    box-shadow: none;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  /* ✅ Rows-per-page dropdown: small + pretty (not ugly) */
+  .dashboard-paginator .p-dropdown {
+    width: auto !important;
+    min-width: 5.75rem !important;
+    height: 2.35rem !important;
+
+    display: inline-flex !important;
+    align-items: center !important;
+
+    background: var(--surface-soft) !important;
+    border: 1px solid hsl(var(--border)) !important;
+    border-radius: 999px !important;
+    box-shadow: var(--shadow-soft);
+    padding: 0 0.2rem !important;
+  }
+
+  /* ✅ Remove the “inner circle/bubble” around the selected number (e.g. 50) */
+  .dashboard-paginator .p-dropdown .p-dropdown-label,
+  .dashboard-paginator .p-dropdown .p-dropdown-label.p-inputtext {
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    padding: 0 0.75rem !important;
+    display: flex !important;
+    align-items: center !important;
+  }
+
+  .dashboard-paginator .p-dropdown:not(.p-disabled):hover {
+    background: hsl(var(--muted)) !important;
+  }
+
+  .dashboard-paginator .p-dropdown.p-focus {
+    box-shadow: 0 0 0 1px hsl(var(--ring)),
+      0 0 0 4px hsl(var(--ring) / 0.25) !important;
+  }
+
+
+
+  .dashboard-paginator .p-dropdown .p-dropdown-trigger {
+    width: 2.25rem !important;
+    height: 2.25rem !important;
+
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+
+    border-left: 1px solid hsl(var(--border)) !important;
+    border-top-right-radius: 999px !important;
+    border-bottom-right-radius: 999px !important;
+
+    color: hsl(var(--muted-foreground)) !important;
+  }
+
+  /* Dropdown panel */
+  .p-dropdown-panel {
+    background: var(--surface) !important;
+    border: 1px solid hsl(var(--border)) !important;
+    border-radius: 1rem !important;
+    box-shadow: var(--shadow-elevated) !important;
+    overflow: hidden !important;
+    z-index: 9999 !important;
+  }
+
+  .p-dropdown-panel .p-dropdown-items {
+    padding: 0.4rem !important;
+    background: transparent !important;
+  }
+
+  .p-dropdown-panel .p-dropdown-item {
+    border-radius: 0.85rem !important;
+    padding: 0.55rem 0.75rem !important;
+    font-weight: 700 !important;
+    color: hsl(var(--foreground)) !important;
+  }
+
+  .p-dropdown-panel .p-dropdown-item:hover {
+    background: hsl(var(--muted)) !important;
+  }
+
+  .p-dropdown-panel .p-dropdown-item.p-highlight {
+    background: hsl(var(--primary) / 0.16) !important;
+    color: hsl(var(--foreground)) !important;
+  }
 
   @media (max-width: 640px) {
     .card {
       border-radius: 1rem;
     }
 
-    .dashboard-table thead th {
-      padding-block: 0.7rem;
+    .dashboard-datatable .p-inputtext {
+      width: 100%;
     }
   }
 }

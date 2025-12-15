@@ -3,27 +3,29 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
-import {
-  FaBell,
-  FaEye,
-  FaDownload,
-  FaCircle,
-  FaSort,
-  FaSortUp,
-  FaSortDown,
-} from "react-icons/fa";
-import ThemeToggle from "@/components/ThemeToggle";
 
+import {
+  DataTable,
+  type DataTablePageEvent,
+  type DataTableSortEvent,
+} from "primereact/datatable";
+import { Column } from "primereact/column";
+import { InputText } from "primereact/inputtext";
+
+import { FaBell, FaCircle, FaDownload, FaEye } from "react-icons/fa";
+
+// ThemeToggle must be client-only to avoid hydration mismatch
+const ThemeToggle = dynamic(() => import("@/components/ThemeToggle"), {
+  ssr: false,
+});
+
+// Leaflet modals are client-only
 const UserMapModal = dynamic(() => import("@/components/UserMapModal"), {
   ssr: false,
 });
 const UserTrackModal = dynamic(() => import("@/components/UserTrackModal"), {
   ssr: false,
 });
-
-/* ─────────────────────────────────────────────
- * Types
- * ───────────────────────────────────────────── */
 
 type User = {
   id: number;
@@ -48,85 +50,30 @@ type Alert = {
   username?: string;
   alert_type: "enter" | "exit" | string;
   occurred_at: string;
-  latitude?: number | null;
-  longitude?: number | null;
 };
 
-type SortKey = "full_name" | "username" | "contact" | "zone" | "status";
-type SortDirection = "asc" | "desc";
-
-/* ─────────────────────────────────────────────
- * Persist table state (sort + page)
- * ───────────────────────────────────────────── */
-
-const DASH_TABLE_STATE_KEY = "geofence:dashboardTableState:v1";
-
-type DashboardTableState = {
-  sortKey: SortKey;
-  sortDirection: SortDirection;
-  currentPage: number;
+type Row = User & {
+  fullNameSort: string;
+  contactSort: string;
+  zoneAssignedSort: number;
+  statusSort: number;
 };
 
-const VALID_SORT_KEYS: SortKey[] = [
-  "full_name",
-  "username",
-  "contact",
-  "zone",
-  "status",
-];
+const TABLE_STATE_KEY = "geofence:datatable:v3";
 
-function readDashboardTableState(): DashboardTableState | null {
-  if (typeof window === "undefined") return null;
-
-  try {
-    const raw = window.localStorage.getItem(DASH_TABLE_STATE_KEY);
-    if (!raw) return null;
-
-    const parsed = JSON.parse(raw) as Partial<DashboardTableState>;
-
-    const sortKey: SortKey = VALID_SORT_KEYS.includes(parsed.sortKey as SortKey)
-      ? (parsed.sortKey as SortKey)
-      : "full_name";
-
-    const sortDirection: SortDirection =
-      parsed.sortDirection === "asc" || parsed.sortDirection === "desc"
-        ? parsed.sortDirection
-        : "asc";
-
-    const currentPage =
-      typeof parsed.currentPage === "number" && parsed.currentPage >= 1
-        ? Math.floor(parsed.currentPage)
-        : 1;
-
-    return { sortKey, sortDirection, currentPage };
-  } catch {
-    return null;
-  }
-}
-
-function writeDashboardTableState(state: DashboardTableState) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(DASH_TABLE_STATE_KEY, JSON.stringify(state));
-  } catch {}
-}
-
-function clearDashboardTableState() {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.removeItem(DASH_TABLE_STATE_KEY);
-  } catch {}
-}
-
-/* ─────────────────────────────────────────────
- * Pure helpers
- * ───────────────────────────────────────────── */
+type TableState = {
+  first: number;
+  rows: number;
+  sortField: string;
+  sortOrder: 1 | -1;
+  globalFilter: string;
+};
 
 function hasZone(u: User): boolean {
   return (
-    u.zone_center_lat !== null &&
-    u.zone_center_lng !== null &&
-    u.zone_radius_m !== null
+    u.zone_center_lat != null &&
+    u.zone_center_lng != null &&
+    u.zone_radius_m != null
   );
 }
 
@@ -147,63 +94,35 @@ function formatDateTime(iso: string | null): string {
   return d.toLocaleString();
 }
 
-/* ─────────────────────────────────────────────
- * Sortable header component
- * ───────────────────────────────────────────── */
-
-interface SortableHeaderProps {
-  label: string;
-  column: SortKey;
-  activeKey: SortKey;
-  direction: SortDirection;
-  onSort: (key: SortKey) => void;
-  align?: "left" | "center";
+function readTableState(): TableState | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(TABLE_STATE_KEY);
+    if (!raw) return null;
+    const s = JSON.parse(raw) as Partial<TableState>;
+    return {
+      first: typeof s.first === "number" ? Math.max(0, s.first) : 0,
+      rows: typeof s.rows === "number" ? Math.max(10, s.rows) : 10,
+      sortField: typeof s.sortField === "string" ? s.sortField : "fullNameSort",
+      sortOrder: s.sortOrder === -1 ? -1 : 1,
+      globalFilter: typeof s.globalFilter === "string" ? s.globalFilter : "",
+    };
+  } catch {
+    return null;
+  }
 }
 
-function SortableHeader({
-  label,
-  column,
-  activeKey,
-  direction,
-  onSort,
-  align = "left",
-}: SortableHeaderProps) {
-  const isActive = activeKey === column;
-
-  return (
-    <button
-      type="button"
-      onClick={() => onSort(column)}
-      className={`group inline-flex items-center gap-1 text-[11px] sm:text-xs font-medium uppercase tracking-wide ${
-        align === "center" ? "justify-center w-full" : ""
-      }`}
-    >
-      <span>{label}</span>
-      <span className="text-[10px] text-[hsl(var(--muted-foreground))] group-hover:text-[hsl(var(--foreground))]">
-        {isActive ? (
-          direction === "asc" ? (
-            <FaSortUp />
-          ) : (
-            <FaSortDown />
-          )
-        ) : (
-          <FaSort className="opacity-60" />
-        )}
-      </span>
-    </button>
-  );
+function writeTableState(next: TableState) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(TABLE_STATE_KEY, JSON.stringify(next));
+  } catch {}
 }
 
-/* ─────────────────────────────────────────────
- * Main dashboard component
- * ───────────────────────────────────────────── */
-
-const PAGE_SIZE = 15;
-
-const DashboardPage: React.FC = () => {
+export default function DashboardPage() {
   const router = useRouter();
 
-  const [users, setUsers] = useState<User[] | null>(null); // null = loading
+  const [users, setUsers] = useState<User[] | null>(null);
   const [usersError, setUsersError] = useState<string | null>(null);
 
   const [selectedUserForZone, setSelectedUserForZone] = useState<User | null>(
@@ -215,55 +134,38 @@ const DashboardPage: React.FC = () => {
 
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [alertsOpen, setAlertsOpen] = useState(false);
-
   const alertsRef = useRef<HTMLDivElement | null>(null);
 
-  const [sortKey, setSortKey] = useState<SortKey>("full_name");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  // DataTable state
+  const [first, setFirst] = useState(0);
+  const [rows, setRows] = useState(10);
+  const [sortField, setSortField] = useState<string>("fullNameSort");
+  const [sortOrder, setSortOrder] = useState<1 | -1>(1);
+  const [globalFilter, setGlobalFilter] = useState("");
 
-  const [currentPage, setCurrentPage] = useState(1);
-
-  const skipFirstPersistRef = useRef(true);
-
-  /* ─────────────────────────────────────────────
-   * Restore table state on mount
-   * ───────────────────────────────────────────── */
+  // Restore table state
   useEffect(() => {
-    const saved = readDashboardTableState();
+    const saved = readTableState();
     if (!saved) return;
-
-    setSortKey((prev) => (prev === saved.sortKey ? prev : saved.sortKey));
-    setSortDirection((prev) =>
-      prev === saved.sortDirection ? prev : saved.sortDirection
-    );
-    setCurrentPage((prev) =>
-      prev === saved.currentPage ? prev : saved.currentPage
-    );
+    setFirst(saved.first);
+    setRows(saved.rows);
+    setSortField(saved.sortField);
+    setSortOrder(saved.sortOrder);
+    setGlobalFilter(saved.globalFilter);
   }, []);
 
-  /* ─────────────────────────────────────────────
-   * Persist table state whenever it changes
-   * ───────────────────────────────────────────── */
+  // Persist table state
   useEffect(() => {
-    if (skipFirstPersistRef.current) {
-      skipFirstPersistRef.current = false;
-      return;
-    }
-    writeDashboardTableState({ sortKey, sortDirection, currentPage });
-  }, [sortKey, sortDirection, currentPage]);
+    writeTableState({ first, rows, sortField, sortOrder, globalFilter });
+  }, [first, rows, sortField, sortOrder, globalFilter]);
 
-  /* ─────────────────────────────────────────────
-   * Auth guard
-   * ───────────────────────────────────────────── */
+  // Auth guard
   useEffect(() => {
-    if (typeof window === "undefined") return;
     const isAuthed = localStorage.getItem("adminAuth") === "true";
     if (!isAuthed) router.replace("/");
   }, [router]);
 
-  /* ─────────────────────────────────────────────
-   * Load users (polling)
-   * ───────────────────────────────────────────── */
+  // Load users (polling)
   useEffect(() => {
     const fetchUsers = async () => {
       try {
@@ -272,19 +174,10 @@ const DashboardPage: React.FC = () => {
 
         const data: User[] = await res.json();
         const nonAdmins = data.filter((u) => u.role !== "admin");
-
-        setUsers((prev) => {
-          if (prev === null) return nonAdmins;
-          const prevStr = JSON.stringify(prev);
-          const nextStr = JSON.stringify(nonAdmins);
-          if (prevStr === nextStr) return prev;
-          return nonAdmins;
-        });
-
+        setUsers(nonAdmins);
         setUsersError(null);
-      } catch (err: unknown) {
-        if (err instanceof Error) setUsersError(err.message);
-        else setUsersError("Failed to load users");
+      } catch (e: unknown) {
+        setUsersError(e instanceof Error ? e.message : "Failed to load users");
       }
     };
 
@@ -293,16 +186,7 @@ const DashboardPage: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  useEffect(() => {
-    if (!selectedUserForTrack || users === null) return;
-    const updated = users.find((u) => u.id === selectedUserForTrack.id);
-    if (!updated || updated === selectedUserForTrack) return;
-    setSelectedUserForTrack(updated);
-  }, [users, selectedUserForTrack]);
-
-  /* ─────────────────────────────────────────────
-   * Load alerts
-   * ───────────────────────────────────────────── */
+  // Load alerts (polling)
   useEffect(() => {
     const fetchAlerts = async () => {
       try {
@@ -311,611 +195,429 @@ const DashboardPage: React.FC = () => {
 
         const data = (await res.json()) as Alert[];
 
-        if (typeof window !== "undefined") {
-          const clearedUntilStr = localStorage.getItem("alerts-cleared-until");
-          let filtered = data;
+        const clearedUntilStr = localStorage.getItem("alerts-cleared-until");
+        let filtered = data;
 
-          if (clearedUntilStr) {
-            const clearedUntil = new Date(clearedUntilStr);
-            filtered = data.filter(
-              (a) => new Date(a.occurred_at) > clearedUntil
-            );
-          }
-
-          const sorted = filtered.sort(
-            (a, b) =>
-              new Date(b.occurred_at).getTime() -
-              new Date(a.occurred_at).getTime()
-          );
-          setAlerts(sorted.slice(0, 15));
-        } else {
-          setAlerts(data);
+        if (clearedUntilStr) {
+          const clearedUntil = new Date(clearedUntilStr);
+          filtered = data.filter((a) => new Date(a.occurred_at) > clearedUntil);
         }
+
+        filtered.sort(
+          (a, b) =>
+            new Date(b.occurred_at).getTime() -
+            new Date(a.occurred_at).getTime()
+        );
+
+        setAlerts(filtered.slice(0, 15));
       } catch {}
     };
 
-    fetchAlerts();
+    void fetchAlerts();
     const interval = setInterval(fetchAlerts, 3000);
     return () => clearInterval(interval);
   }, []);
 
-  /* ─────────────────────────────────────────────
-   * Close alerts on click outside + Escape
-   * ───────────────────────────────────────────── */
+  // Close alerts on outside click + ESC
   useEffect(() => {
     if (!alertsOpen) return;
 
-    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
-      if (!alertsRef.current) return;
+    const onOutside = (event: MouseEvent | TouchEvent) => {
       const target = event.target as Node | null;
-      if (target && !alertsRef.current.contains(target)) {
+      if (alertsRef.current && target && !alertsRef.current.contains(target)) {
         setAlertsOpen(false);
       }
     };
 
-    const handleKeyDown = (event: KeyboardEvent) => {
+    const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") setAlertsOpen(false);
     };
 
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("touchstart", handleClickOutside);
-    document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("mousedown", onOutside);
+    document.addEventListener("touchstart", onOutside);
+    document.addEventListener("keydown", onKey);
 
     return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("touchstart", handleClickOutside);
-      document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("mousedown", onOutside);
+      document.removeEventListener("touchstart", onOutside);
+      document.removeEventListener("keydown", onKey);
     };
   }, [alertsOpen]);
 
-  /* ─────────────────────────────────────────────
-   * Sorting + pagination derived data
-   * ───────────────────────────────────────────── */
-
-  const sortedUsers = useMemo(() => {
-    if (!users) return null;
-
-    const list = [...users];
-
-    list.sort((a, b) => {
-      let result = 0;
-
-      switch (sortKey) {
-        case "full_name": {
-          const nameA = (a.full_name || a.username || "").toLowerCase();
-          const nameB = (b.full_name || b.username || "").toLowerCase();
-          result = nameA.localeCompare(nameB);
-          break;
-        }
-
-        case "username": {
-          const ua = (a.username || "").toLowerCase();
-          const ub = (b.username || "").toLowerCase();
-          result = ua.localeCompare(ub);
-          break;
-        }
-
-        case "contact": {
-          const contactA = formatContact(a).toLowerCase();
-          const contactB = formatContact(b).toLowerCase();
-          result = contactA.localeCompare(contactB);
-          break;
-        }
-
-        case "zone": {
-          const za = hasZone(a) ? 1 : 0;
-          const zb = hasZone(b) ? 1 : 0;
-          result = za - zb;
-          break;
-        }
-
-        case "status": {
-          const sa = isInsideZone(a) ? 1 : 0;
-          const sb = isInsideZone(b) ? 1 : 0;
-          result = sa - sb;
-          break;
-        }
-
-        default:
-          result = 0;
-      }
-
-      if (result === 0) {
-        const createdA = a.created_at ? new Date(a.created_at).getTime() : 0;
-        const createdB = b.created_at ? new Date(b.created_at).getTime() : 0;
-        result = createdA - createdB;
-      }
-
-      return sortDirection === "asc" ? result : -result;
-    });
-
-    return list;
-  }, [users, sortKey, sortDirection]);
-
-  useEffect(() => {
-    if (!sortedUsers) return;
-    const total = sortedUsers.length;
-    const maxPage = total === 0 ? 1 : Math.ceil(total / PAGE_SIZE);
-    setCurrentPage((prev) => Math.min(prev, maxPage));
-  }, [sortedUsers]);
-
-  const totalUsers = sortedUsers?.length ?? 0;
-  const totalPages = totalUsers === 0 ? 1 : Math.ceil(totalUsers / PAGE_SIZE);
-
-  const startIndex = (currentPage - 1) * PAGE_SIZE;
-  const endIndex = Math.min(startIndex + PAGE_SIZE, totalUsers);
-
-  const pageUsers =
-    sortedUsers && totalUsers > 0
-      ? sortedUsers.slice(startIndex, endIndex)
-      : [];
-
-  /* ─────────────────────────────────────────────
-   * Handlers
-   * ───────────────────────────────────────────── */
+  const rowsData: Row[] = useMemo(() => {
+    if (!users) return [];
+    return users.map((u) => ({
+      ...u,
+      fullNameSort: (u.full_name || u.username || "").toLowerCase(),
+      contactSort: formatContact(u).toLowerCase(),
+      zoneAssignedSort: hasZone(u) ? 1 : 0,
+      statusSort: isInsideZone(u) ? 1 : 0,
+    }));
+  }, [users]);
 
   const handleLogout = async () => {
     try {
       await fetch("/api/logout", { method: "POST" });
     } catch {}
 
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("adminAuth");
-      localStorage.removeItem("adminUsername");
-    }
-
-    clearDashboardTableState();
-
+    localStorage.removeItem("adminAuth");
+    localStorage.removeItem("adminUsername");
     router.replace("/");
   };
 
-  const handleViewLogs = (userId: number) => {
+  const handleViewLogs = (userId: number) =>
     router.push(`/dashboard/logs?userId=${userId}`);
-  };
 
   const handleDownloadUserLogs = (userId: number) => {
-    if (typeof window !== "undefined") {
-      window.location.href = `/api/alerts?userId=${userId}&format=csv`;
-    }
+    window.location.href = `/api/alerts?userId=${userId}&format=csv`;
   };
 
   const handleDownloadAllLogs = () => {
-    if (typeof window !== "undefined") {
-      window.location.href = `/api/alerts?format=csv`;
-    }
+    window.location.href = `/api/alerts?format=csv`;
   };
 
   const handleClearAlerts = () => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("alerts-cleared-until", new Date().toISOString());
-    }
+    localStorage.setItem("alerts-cleared-until", new Date().toISOString());
     setAlerts([]);
   };
 
-  const handleSort = (key: SortKey) => {
-    if (sortKey === key) {
-      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
-    } else {
-      setSortKey(key);
-      setSortDirection("asc");
-    }
-    setCurrentPage(1);
+  const headerTemplate = (
+    <div className="px-4 sm:px-6 py-4 border-b border-[hsl(var(--border))] flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+      <div>
+        <p className="text-sm font-semibold">Users Overview</p>
+        <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1">
+          Full list of mobile users, their assigned zones and current status.
+        </p>
+      </div>
+
+      <div className="flex items-center gap-2 min-w-0">
+        <span className="text-xs text-[hsl(var(--muted-foreground))] hidden sm:inline">
+          Search
+        </span>
+        <InputText
+          value={globalFilter}
+          onChange={(e) => {
+            setGlobalFilter(e.target.value);
+            setFirst(0);
+          }}
+          placeholder="Name / username / contact"
+        />
+      </div>
+    </div>
+  );
+
+  // ✅ No fixed widths. Everything truncates safely inside fixed table layout.
+  const fullNameBody = (u: Row) => (
+    <div className="min-w-0">
+      <div className="text-sm font-semibold truncate">
+        {u.full_name || u.username || "—"}
+      </div>
+      <div className="mt-0.5 text-[11px] text-[hsl(var(--muted-foreground))] truncate">
+        Last seen: {formatDateTime(u.last_seen)}
+      </div>
+    </div>
+  );
+
+  const usernameBody = (u: Row) => (
+    <div className="min-w-0 truncate">{u.username}</div>
+  );
+
+  const contactBody = (u: Row) => (
+    <div className="min-w-0 text-[hsl(var(--muted-foreground))] truncate">
+      {formatContact(u)}
+    </div>
+  );
+
+  const zoneBody = (u: Row) => {
+    const assigned = hasZone(u);
+    return (
+      <div className="min-w-0">
+        <button
+          type="button"
+          onClick={() => setSelectedUserForZone(u)}
+          className="btn-base bg-emerald-500 hover:bg-emerald-400 text-[11px] sm:text-xs font-semibold text-white w-full"
+        >
+          View / Update
+        </button>
+
+        {!assigned && (
+          <div className="mt-1 text-[11px] text-[hsl(var(--muted-foreground))] truncate">
+            No zone assigned yet
+          </div>
+        )}
+      </div>
+    );
   };
 
-  /* ─────────────────────────────────────────────
-   * UI
-   * ───────────────────────────────────────────── */
+  const statusBody = (u: Row) => {
+    const assigned = hasZone(u);
+    const inside = isInsideZone(u);
+
+    if (!assigned) {
+      return (
+        <span className="text-xs text-[hsl(var(--muted-foreground))] italic">
+          No zone
+        </span>
+      );
+    }
+
+    return (
+      <div className="text-xs font-semibold whitespace-nowrap">
+        <span
+          className={
+            inside
+              ? "text-[hsl(var(--success))]"
+              : "text-[hsl(var(--muted-foreground))]"
+          }
+        >
+          Inside
+        </span>
+        <span className="mx-1 text-[hsl(var(--muted-foreground))]">/</span>
+        <span
+          className={
+            !inside
+              ? "text-[hsl(var(--danger))]"
+              : "text-[hsl(var(--muted-foreground))]"
+          }
+        >
+          Outside
+        </span>
+      </div>
+    );
+  };
+
+  const trackBody = (u: Row) => {
+    const assigned = hasZone(u);
+    return (
+      <button
+        type="button"
+        onClick={() => setSelectedUserForTrack(u)}
+        disabled={!assigned}
+        className="btn-base bg-rose-500 hover:bg-rose-400 text-[11px] sm:text-xs font-semibold text-white w-full"
+        title={!assigned ? "Assign a zone first" : "Track user"}
+      >
+        Track
+      </button>
+    );
+  };
+
+  const logsBody = (u: Row) => {
+    const assigned = hasZone(u);
+    return (
+      <div className="flex items-center justify-center gap-2 whitespace-nowrap">
+        <button
+          type="button"
+          onClick={() => handleViewLogs(u.id)}
+          disabled={!assigned}
+          className="action-icon-btn inline-flex h-9 w-9 items-center justify-center rounded-full bg-amber-500 hover:bg-amber-400 text-base font-semibold transition-colors"
+          title={!assigned ? "Assign a zone first" : "View logs"}
+        >
+          <FaEye />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => handleDownloadUserLogs(u.id)}
+          disabled={!assigned}
+          className="action-icon-btn inline-flex h-9 w-9 items-center justify-center rounded-full bg-amber-500 hover:bg-amber-400 text-base font-semibold transition-colors"
+          title={!assigned ? "Assign a zone first" : "Download CSV"}
+        >
+          <FaDownload />
+        </button>
+      </div>
+    );
+  };
 
   return (
     <main className="min-h-screen bg-[var(--surface-root)] text-[hsl(var(--foreground))] flex flex-col">
-      {}
-      <header
-        className="
-          dashboard-topbar
-          sticky top-0 z-30
-          px-4 sm:px-6 lg:px-8
-          py-3 sm:py-4
-          border-b
-          flex flex-col gap-3
-          sm:flex-row sm:items-center sm:justify-between
-        "
-      >
-        <div>
-          <h1 className="text-lg sm:text-xl font-semibold tracking-tight">
-            Admin Dashboard
-          </h1>
-          <p className="mt-1 text-xs sm:text-sm text-[hsl(var(--muted-foreground))]">
-            Manage users, geofence zones and live location tracking.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3 sm:gap-4">
-          <ThemeToggle />
-
-          {}
-          <div className="relative" ref={alertsRef}>
-            <button
-              type="button"
-              onClick={() => setAlertsOpen((prev) => !prev)}
-              className="btn-base btn-ghost !h-10 !w-10 !p-0 rounded-full relative"
-              aria-expanded={alertsOpen}
-              aria-label="Toggle alerts"
-            >
-              <FaBell className="text-sm" aria-hidden="true" />
-              {alerts.length > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[hsl(var(--success))]">
-                  <span className="sr-only">Unread alerts</span>
-                </span>
-              )}
-            </button>
-
-            {alertsOpen && (
-              <div className="absolute right-0 mt-3 w-80 card !rounded-2xl shadow-[var(--shadow-elevated)] z-20">
-                <div className="flex items-center justify-between px-4 py-3 border-b border-[hsl(var(--border))]">
-                  <span className="text-xs font-medium uppercase tracking-wide text-[hsl(var(--muted-foreground))]">
-                    Recent Alerts
-                  </span>
-                  <div className="flex gap-3">
-                    <button
-                      onClick={handleClearAlerts}
-                      className="text-[11px] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
-                    >
-                      Clear
-                    </button>
-                    <button
-                      onClick={handleDownloadAllLogs}
-                      className="text-[11px] text-[hsl(var(--primary))] hover:text-[hsl(var(--primary)/0.9)]"
-                    >
-                      Download all
-                    </button>
-                  </div>
-                </div>
-
-                <div className="max-h-80 overflow-y-auto py-1">
-                  {alerts.length === 0 && (
-                    <div className="px-4 py-6 text-xs text-[hsl(var(--muted-foreground))] text-center">
-                      No alerts after the last clear.
-                    </div>
-                  )}
-
-                  {alerts.map((alert) => {
-                    const isEnter = alert.alert_type === "enter";
-                    return (
-                      <div
-                        key={alert.id}
-                        className="flex items-start gap-2 px-4 py-2.5 hover:bg-[hsl(var(--muted))] transition-colors"
-                      >
-                        <FaCircle
-                          className={`mt-1 text-[8px] ${
-                            isEnter
-                              ? "text-[hsl(var(--success))]"
-                              : "text-[hsl(var(--danger))]"
-                          }`}
-                        />
-
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between gap-2">
-                            <p className="text-xs font-medium">
-                              {isEnter ? "Entered zone" : "Left zone"}
-                            </p>
-                            <span className="text-[10px] text-[hsl(var(--muted-foreground))]">
-                              {new Date(alert.occurred_at).toLocaleTimeString()}
-                            </span>
-                          </div>
-
-                          <p className="mt-0.5 text-[11px] text-[hsl(var(--muted-foreground))]">
-                            {alert.username ?? `User #${alert.user_id}`}
-                          </p>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
+      {/* Top bar */}
+      <header className="dashboard-topbar sticky top-0 z-30 px-4 sm:px-6 lg:px-8 py-3 sm:py-4 border-b">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-lg sm:text-xl font-semibold tracking-tight">
+              Admin Dashboard
+            </h1>
+            <p className="mt-1 text-xs sm:text-sm text-[hsl(var(--muted-foreground))]">
+              Manage users, geofence zones and live location tracking.
+            </p>
           </div>
 
-          {}
-          <button
-            onClick={handleLogout}
-            className="btn-base btn-ghost rounded-full text-xs sm:text-sm"
-          >
-            Logout
-          </button>
+          <div className="flex items-center gap-3 sm:gap-4">
+            <ThemeToggle />
+
+            {/* Alerts */}
+            <div className="relative" ref={alertsRef}>
+              <button
+                type="button"
+                onClick={() => setAlertsOpen((p) => !p)}
+                className="btn-base btn-ghost !h-10 !w-10 !p-0 rounded-full relative"
+                aria-expanded={alertsOpen}
+                aria-label="Toggle alerts"
+              >
+                <FaBell className="text-sm" aria-hidden="true" />
+                {alerts.length > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[hsl(var(--success))]">
+                    <span className="sr-only">Unread alerts</span>
+                  </span>
+                )}
+              </button>
+
+              {alertsOpen && (
+                <div className="absolute right-0 mt-3 w-80 card !rounded-2xl shadow-[var(--shadow-elevated)] z-20">
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-[hsl(var(--border))]">
+                    <span className="text-xs font-medium uppercase tracking-wide text-[hsl(var(--muted-foreground))]">
+                      Recent Alerts
+                    </span>
+                    <div className="flex gap-3">
+                      <button
+                        onClick={handleClearAlerts}
+                        className="text-[11px] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
+                      >
+                        Clear
+                      </button>
+                      <button
+                        onClick={handleDownloadAllLogs}
+                        className="text-[11px] text-[hsl(var(--primary))] hover:text-[hsl(var(--primary)/0.9)]"
+                      >
+                        Download all
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="max-h-80 overflow-y-auto py-1">
+                    {alerts.length === 0 && (
+                      <div className="px-4 py-6 text-xs text-[hsl(var(--muted-foreground))] text-center">
+                        No alerts after the last clear.
+                      </div>
+                    )}
+
+                    {alerts.map((a) => {
+                      const isEnter = a.alert_type === "enter";
+                      return (
+                        <div
+                          key={a.id}
+                          className="flex items-start gap-2 px-4 py-2.5 hover:bg-[hsl(var(--muted))] transition-colors"
+                        >
+                          <FaCircle
+                            className={`mt-1 text-[8px] ${
+                              isEnter
+                                ? "text-[hsl(var(--success))]"
+                                : "text-[hsl(var(--danger))]"
+                            }`}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-xs font-medium">
+                                {isEnter ? "Entered zone" : "Left zone"}
+                              </p>
+                              <span className="text-[10px] text-[hsl(var(--muted-foreground))]">
+                                {new Date(a.occurred_at).toLocaleTimeString()}
+                              </span>
+                            </div>
+                            <p className="mt-0.5 text-[11px] text-[hsl(var(--muted-foreground))] truncate">
+                              {a.username ?? `User #${a.user_id}`}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={handleLogout}
+              className="btn-base btn-ghost rounded-full text-xs sm:text-sm"
+            >
+              Logout
+            </button>
+          </div>
         </div>
       </header>
 
-      {}
+      {/* Table card */}
       <section className="flex-1 px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
         <div className="card">
-          {}
-          <div className="px-4 sm:px-6 py-3 border-b border-[hsl(var(--border))] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-            <div>
-              <p className="text-sm font-medium">Users Overview</p>
-              <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1">
-                Full list of mobile users, their assigned zones and current
-                status.
-              </p>
-            </div>
-          </div>
-
-          {}
-          <div className="scroll-x hide-scrollbar">
-            <div className="overflow-x-auto max-h-[calc(100vh-260px)]">
-              <table className="dashboard-table min-w-full table-fixed text-sm">
-                <thead className="dashboard-thead sticky top-0 z-10 border-b border-[hsl(var(--border))]">
-                  <tr>
-                    <th className="px-4 sm:px-6 py-2.5 text-left font-medium w-[220px]">
-                      <SortableHeader
-                        label="Full Name"
-                        column="full_name"
-                        activeKey={sortKey}
-                        direction={sortDirection}
-                        onSort={handleSort}
-                      />
-                    </th>
-
-                    <th className="px-4 sm:px-6 py-2.5 text-left font-medium w-[160px]">
-                      <SortableHeader
-                        label="Username"
-                        column="username"
-                        activeKey={sortKey}
-                        direction={sortDirection}
-                        onSort={handleSort}
-                      />
-                    </th>
-
-                    <th className="px-4 sm:px-6 py-2.5 text-left font-medium w-[200px]">
-                      <SortableHeader
-                        label="Contact"
-                        column="contact"
-                        activeKey={sortKey}
-                        direction={sortDirection}
-                        onSort={handleSort}
-                      />
-                    </th>
-
-                    <th className="px-4 sm:px-6 py-2.5 text-left font-medium w-[170px]">
-                      <SortableHeader
-                        label="Assigned Zone"
-                        column="zone"
-                        activeKey={sortKey}
-                        direction={sortDirection}
-                        onSort={handleSort}
-                      />
-                    </th>
-
-                    <th className="px-4 sm:px-6 py-2.5 text-left font-medium w-[150px]">
-                      <SortableHeader
-                        label="Status"
-                        column="status"
-                        activeKey={sortKey}
-                        direction={sortDirection}
-                        onSort={handleSort}
-                      />
-                    </th>
-
-                    <th className="px-4 sm:px-6 py-2.5 text-center font-medium w-[110px]">
-                      Track
-                    </th>
-
-                    <th className="px-4 sm:px-6 py-2.5 text-center font-medium w-[110px]">
-                      Logs
-                    </th>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {}
-                  {users === null && !usersError && (
-                    <tr>
-                      <td
-                        colSpan={7}
-                        className="px-4 sm:px-6 py-8 text-center text-[hsl(var(--muted-foreground))] text-sm"
-                      >
-                        Loading users…
-                      </td>
-                    </tr>
-                  )}
-
-                  {}
-                  {usersError && (
-                    <tr>
-                      <td
-                        colSpan={7}
-                        className="px-4 sm:px-6 py-8 text-center text-[hsl(var(--danger))] text-sm"
-                      >
-                        {usersError}
-                      </td>
-                    </tr>
-                  )}
-
-                  {}
-                  {users !== null && !usersError && users.length === 0 && (
-                    <tr>
-                      <td
-                        colSpan={7}
-                        className="px-4 sm:px-6 py-8 text-center text-[hsl(var(--muted-foreground))] text-sm"
-                      >
-                        No users yet. Once mobile users sign in, they will
-                        appear here.
-                      </td>
-                    </tr>
-                  )}
-
-                  {}
-                  {users !== null &&
-                    !usersError &&
-                    users.length > 0 &&
-                    pageUsers.map((user) => {
-                      const inside = isInsideZone(user);
-                      const zoneAssigned = hasZone(user);
-
-                      return (
-                        <tr key={user.id} className="transition-colors">
-                          {}
-                          <td className="px-4 sm:px-6 py-2.5 whitespace-nowrap align-top w-[220px]">
-                            <div className="text-sm truncate">
-                              {user.full_name || "—"}
-                            </div>
-                            <div className="mt-0.5 text-[11px] text-[hsl(var(--muted-foreground))] truncate">
-                              Last seen: {formatDateTime(user.last_seen)}
-                            </div>
-                          </td>
-
-                          {}
-                          <td className="px-4 sm:px-6 py-2.5 whitespace-nowrap w-[160px] truncate">
-                            {user.username}
-                          </td>
-
-                          {}
-                          <td className="px-4 sm:px-6 py-2.5 whitespace-nowrap w-[200px] truncate text-[hsl(var(--muted-foreground))]">
-                            {formatContact(user)}
-                          </td>
-
-                          {}
-                          <td className="px-4 sm:px-6 py-2.5 w-[170px]">
-                            <button
-                              type="button"
-                              onClick={() => setSelectedUserForZone(user)}
-                              className="btn-base bg-emerald-500 hover:bg-emerald-400 text-[11px] sm:text-xs font-semibold text-white w-full"
-                            >
-                              View / Update
-                            </button>
-                            {!zoneAssigned && (
-                              <div className="mt-1 text-[11px] text-[hsl(var(--muted-foreground))]">
-                                No zone assigned yet
-                              </div>
-                            )}
-                          </td>
-
-                          {}
-                          <td className="px-4 sm:px-6 py-2.5 w-[150px]">
-                            {zoneAssigned ? (
-                              <div className="text-xs font-semibold">
-                                <span
-                                  className={
-                                    inside
-                                      ? "text-[hsl(var(--success))]"
-                                      : "text-[hsl(var(--muted-foreground))]"
-                                  }
-                                >
-                                  Inside
-                                </span>
-                                <span className="mx-0.5 text-[hsl(var(--muted-foreground))]">
-                                  /
-                                </span>
-                                <span
-                                  className={
-                                    !inside
-                                      ? "text-[hsl(var(--danger))]"
-                                      : "text-[hsl(var(--muted-foreground))]"
-                                  }
-                                >
-                                  Outside
-                                </span>
-                              </div>
-                            ) : (
-                              <span className="text-xs text-[hsl(var(--muted-foreground))] italic">
-                                No zone
-                              </span>
-                            )}
-                          </td>
-
-                          {}
-                          <td className="px-4 sm:px-6 py-2.5 text-center w-[110px]">
-                            <button
-                              type="button"
-                              onClick={() => setSelectedUserForTrack(user)}
-                              className="btn-base bg-rose-500 hover:bg-rose-400 text-[11px] sm:text-xs font-semibold text-white w-full"
-                            >
-                              Track
-                            </button>
-                          </td>
-
-                          {}
-                          <td className="px-4 sm:px-6 py-2.5 text-center w-[110px]">
-                            <div className="flex items-center justify-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => handleViewLogs(user.id)}
-                                className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-amber-500 hover:bg-amber-400 text-base font-semibold transition-colors"
-                                title="View logs"
-                              >
-                                <FaEye />
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => handleDownloadUserLogs(user.id)}
-                                className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-amber-500 hover:bg-amber-400 text-base font-semibold transition-colors"
-                                title="Download CSV"
-                              >
-                                <FaDownload />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {}
-          {sortedUsers && sortedUsers.length > 0 && (
-            <div className="px-4 sm:px-6 py-3 border-t border-[hsl(var(--border))] flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-[hsl(var(--muted-foreground))]">
-              <span>
-                Showing{" "}
-                <span className="font-semibold text-[hsl(var(--foreground))]">
-                  {totalUsers === 0 ? 0 : startIndex + 1}–{endIndex}
-                </span>{" "}
-                of{" "}
-                <span className="font-semibold text-[hsl(var(--foreground))]">
-                  {totalUsers}
-                </span>{" "}
-                users
-              </span>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                  className="btn-base btn-ghost text-[11px] px-3 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Previous
-                </button>
-
-                <span>
-                  Page{" "}
-                  <span className="font-semibold text-[hsl(var(--foreground))]">
-                    {currentPage}
-                  </span>{" "}
-                  of{" "}
-                  <span className="font-semibold text-[hsl(var(--foreground))]">
-                    {totalPages}
-                  </span>
-                </span>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    setCurrentPage((p) => Math.min(totalPages, p + 1))
-                  }
-                  disabled={currentPage === totalPages}
-                  className="btn-base btn-ghost text-[11px] px-3 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Next
-                </button>
-              </div>
+          {usersError && (
+            <div className="px-4 sm:px-6 py-3 border-b border-[hsl(var(--border))] text-sm text-[hsl(var(--danger))]">
+              {usersError}
             </div>
           )}
+
+          <DataTable
+            value={rowsData}
+            dataKey="id"
+            className="dashboard-datatable"
+            header={headerTemplate}
+            globalFilter={globalFilter}
+            globalFilterFields={["fullNameSort", "username", "contactSort"]}
+            stripedRows
+            paginator
+            paginatorClassName="dashboard-paginator"
+            paginatorTemplate="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink RowsPerPageDropdown"
+            first={first}
+            rows={rows}
+            rowsPerPageOptions={[10, 15, 25, 50]}
+            onPage={(e: DataTablePageEvent) => {
+              setFirst(e.first);
+              setRows(e.rows);
+            }}
+            sortField={sortField}
+            sortOrder={sortOrder}
+            onSort={(e: DataTableSortEvent) => {
+              setSortField((e.sortField as string) || "fullNameSort");
+              setSortOrder((e.sortOrder as 1 | -1) || 1);
+              setFirst(0);
+            }}
+            // ✅ Prevent “horizontal scroll”: stack layout on small screens instead of scrolling
+            responsiveLayout="stack"
+            breakpoint="900px"
+            emptyMessage={users === null ? "Loading users…" : "No users yet."}
+          >
+            {/* Percent widths = always fit container (no x-scroll) */}
+            <Column
+              header="Full Name"
+              field="fullNameSort"
+              sortable
+              body={fullNameBody}
+              style={{ width: "23%" }}
+            />
+            <Column
+              header="Username"
+              field="username"
+              sortable
+              body={usernameBody}
+              style={{ width: "14%" }}
+            />
+            <Column
+              header="Contact"
+              field="contactSort"
+              sortable
+              body={contactBody}
+              style={{ width: "18%" }}
+            />
+            <Column
+              header="Assigned Zone"
+              field="zoneAssignedSort"
+              sortable
+              body={zoneBody}
+              style={{ width: "19%" }}
+            />
+            <Column
+              header="Status"
+              field="statusSort"
+              sortable
+              body={statusBody}
+              style={{ width: "10%" }}
+            />
+            <Column header="Track" body={trackBody} style={{ width: "8%" }} />
+            <Column header="Logs" body={logsBody} style={{ width: "8%" }} />
+          </DataTable>
         </div>
       </section>
 
-      {}
+      {/* Zone modal */}
       {selectedUserForZone && (
         <UserMapModal
           user={selectedUserForZone}
@@ -934,7 +636,7 @@ const DashboardPage: React.FC = () => {
         />
       )}
 
-      {}
+      {/* Track modal */}
       {selectedUserForTrack && (
         <UserTrackModal
           user={selectedUserForTrack}
@@ -943,6 +645,4 @@ const DashboardPage: React.FC = () => {
       )}
     </main>
   );
-};
-
-export default DashboardPage;
+}
