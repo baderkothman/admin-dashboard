@@ -257,13 +257,14 @@
     border: 0 !important;
   }
 
-  /* ✅ Kill horizontal scroll (force fit) */
+  /* ✅ FIX: don't squeeze to death; allow scroll if needed */
   .dashboard-datatable .p-datatable-wrapper {
-    overflow-x: hidden !important;
+    overflow-x: auto !important;
   }
 
   .dashboard-datatable .p-datatable-table {
     width: 100% !important;
+    min-width: 1100px !important;
     table-layout: fixed !important;
   }
 
@@ -296,18 +297,19 @@
     color: inherit !important;
   }
 
-  /* Body cells (fix dark-mode white rows) */
+  /* Body cells */
   .dashboard-datatable .p-datatable-tbody>tr>td {
     background: var(--surface) !important;
     color: hsl(var(--foreground)) !important;
     padding: 0.75rem 1.1rem !important;
     border-top: 1px solid hsl(var(--border)) !important;
-    vertical-align: top;
 
-    /* prevent width explosion */
+    vertical-align: middle !important;
+
+    /* ✅ IMPORTANT: prevents letter-by-letter wrapping */
     overflow: hidden !important;
-    overflow-wrap: anywhere !important;
-    word-break: break-word !important;
+    overflow-wrap: normal !important;
+    word-break: normal !important;
   }
 
   .dashboard-datatable .p-datatable-tbody>tr:nth-child(even)>td {
@@ -316,27 +318,6 @@
 
   .dashboard-datatable .p-datatable-tbody>tr:hover>td {
     background: hsl(var(--secondary) / 0.75) !important;
-  }
-
-  /* Search input */
-  .dashboard-datatable .p-inputtext {
-    width: 18rem;
-    border-radius: 999px;
-    background: var(--surface-soft) !important;
-    border: 1px solid hsl(var(--border)) !important;
-    color: hsl(var(--foreground)) !important;
-    padding: 0.62rem 0.95rem !important;
-    box-shadow: var(--shadow-soft);
-  }
-
-  .dashboard-datatable .p-inputtext::placeholder {
-    color: hsl(var(--muted-foreground)) !important;
-  }
-
-  .dashboard-datatable .p-inputtext:focus {
-    outline: none !important;
-    box-shadow: 0 0 0 1px hsl(var(--ring)),
-      0 0 0 4px hsl(var(--ring) / 0.25) !important;
   }
 
   /* Paginator */
@@ -402,7 +383,7 @@
     transform: none;
   }
 
-  /* ✅ Rows-per-page dropdown: small + pretty (not ugly) */
+  /* Rows-per-page dropdown */
   .dashboard-paginator .p-dropdown {
     width: auto !important;
     min-width: 5.75rem !important;
@@ -418,7 +399,6 @@
     padding: 0 0.2rem !important;
   }
 
-  /* ✅ Remove the “inner circle/bubble” around the selected number (e.g. 50) */
   .dashboard-paginator .p-dropdown .p-dropdown-label,
   .dashboard-paginator .p-dropdown .p-dropdown-label.p-inputtext {
     background: transparent !important;
@@ -438,8 +418,6 @@
     box-shadow: 0 0 0 1px hsl(var(--ring)),
       0 0 0 4px hsl(var(--ring) / 0.25) !important;
   }
-
-
 
   .dashboard-paginator .p-dropdown .p-dropdown-trigger {
     width: 2.25rem !important;
@@ -490,10 +468,6 @@
   @media (max-width: 640px) {
     .card {
       border-radius: 1rem;
-    }
-
-    .dashboard-datatable .p-inputtext {
-      width: 100%;
     }
   }
 }

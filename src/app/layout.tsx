@@ -38,7 +38,7 @@ export default function RootLayout({
   return (
     <html lang="en" data-theme="dark" suppressHydrationWarning>
       <head>
-        {/* Prevent theme flash + reduce hydration issues */}
+        {/* Prevent theme flash */}
         <Script
           id="theme-init"
           strategy="beforeInteractive"
@@ -46,12 +46,10 @@ export default function RootLayout({
             __html: `
 (function () {
   try {
-    var mode = localStorage.getItem("admin-theme") || "system";
-    var resolved = mode;
-    if (mode === "system") {
-      resolved = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-    }
-    document.documentElement.setAttribute("data-theme", resolved);
+    var stored = localStorage.getItem("admin-theme");
+    var theme = (stored === "light" || stored === "dark") ? stored : "dark";
+    document.documentElement.setAttribute("data-theme", theme);
+    document.documentElement.style.colorScheme = theme;
   } catch (e) {}
 })();
             `,

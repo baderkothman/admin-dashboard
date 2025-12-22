@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -10,16 +11,14 @@ import {
   type DataTableSortEvent,
 } from "primereact/datatable";
 import { Column } from "primereact/column";
-import { InputText } from "primereact/inputtext";
+import { Paginator } from "primereact/paginator";
 
 import { FaBell, FaCircle, FaDownload, FaEye } from "react-icons/fa";
 
-// ThemeToggle must be client-only to avoid hydration mismatch
 const ThemeToggle = dynamic(() => import("@/components/ThemeToggle"), {
   ssr: false,
 });
 
-// Leaflet modals are client-only
 const UserMapModal = dynamic(() => import("@/components/UserMapModal"), {
   ssr: false,
 });
@@ -68,6 +67,32 @@ type TableState = {
   sortOrder: 1 | -1;
   globalFilter: string;
 };
+
+function useMediaQuery(query: string) {
+  const [matches, setMatches] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+
+    const mql = window.matchMedia(query);
+    const onChange = (e: MediaQueryListEvent) => setMatches(e.matches);
+
+    setMatches(mql.matches);
+
+    if (mql.addEventListener) {
+      mql.addEventListener("change", onChange);
+      return () => mql.removeEventListener("change", onChange);
+    }
+
+    // Safari fallback
+    mql.addListener(onChange);
+    return () => {
+      mql.removeListener(onChange);
+    };
+  }, [query]);
+
+  return matches;
+}
 
 function hasZone(u: User): boolean {
   return (
@@ -119,8 +144,18 @@ function writeTableState(next: TableState) {
   } catch {}
 }
 
+function compareValues(a: unknown, b: unknown) {
+  if (a == null && b == null) return 0;
+  if (a == null) return -1;
+  if (b == null) return 1;
+
+  if (typeof a === "number" && typeof b === "number") return a - b;
+  return String(a).localeCompare(String(b));
+}
+
 export default function DashboardPage() {
   const router = useRouter();
+  const isMobile = useMediaQuery("(max-width: 980px)");
 
   const [users, setUsers] = useState<User[] | null>(null);
   const [usersError, setUsersError] = useState<string | null>(null);
@@ -136,7 +171,7 @@ export default function DashboardPage() {
   const [alertsOpen, setAlertsOpen] = useState(false);
   const alertsRef = useRef<HTMLDivElement | null>(null);
 
-  // DataTable state
+  // Table state
   const [first, setFirst] = useState(0);
   const [rows, setRows] = useState(10);
   const [sortField, setSortField] = useState<string>("fullNameSort");
@@ -255,6 +290,35 @@ export default function DashboardPage() {
     }));
   }, [users]);
 
+  const filteredSortedRows: Row[] = useMemo(() => {
+    const q = globalFilter.trim().toLowerCase();
+    let list = rowsData;
+
+    if (q) {
+      list = rowsData.filter((r) => {
+        return (
+          r.fullNameSort.includes(q) ||
+          r.username.toLowerCase().includes(q) ||
+          r.contactSort.includes(q)
+        );
+      });
+    }
+
+    const field = sortField as keyof Row;
+    const order = sortOrder;
+
+    const sorted = [...list].sort((a, b) => {
+      const cmp = compareValues(a[field], b[field]);
+      return order === -1 ? -cmp : cmp;
+    });
+
+    return sorted;
+  }, [rowsData, globalFilter, sortField, sortOrder]);
+
+  const mobilePageRows = useMemo(() => {
+    return filteredSortedRows.slice(first, first + rows);
+  }, [filteredSortedRows, first, rows]);
+
   const handleLogout = async () => {
     try {
       await fetch("/api/logout", { method: "POST" });
@@ -282,7 +346,7 @@ export default function DashboardPage() {
   };
 
   const headerTemplate = (
-    <div className="px-4 sm:px-6 py-4 border-b border-[hsl(var(--border))] flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+    <div className="px-4 sm:px-6 py-4 border-b border-[hsl(var(--border))] flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
       <div>
         <p className="text-sm font-semibold">Users Overview</p>
         <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1">
@@ -290,23 +354,37 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      <div className="flex items-center gap-2 min-w-0">
-        <span className="text-xs text-[hsl(var(--muted-foreground))] hidden sm:inline">
+      <div className="flex items-center gap-2 min-w-0 w-full md:w-auto">
+        <span className="text-xs text-[hsl(var(--muted-foreground))] hidden md:inline">
           Search
         </span>
-        <InputText
+
+        <input
           value={globalFilter}
           onChange={(e) => {
             setGlobalFilter(e.target.value);
             setFirst(0);
           }}
           placeholder="Name / username / contact"
+          className="
+            w-full md:w-[18rem]
+            rounded-full
+            bg-[hsl(var(--surface-soft-hsl)/0.75)]
+            border border-[hsl(var(--border))]
+            px-4 py-2.5
+            text-sm text-[hsl(var(--foreground))]
+            placeholder:text-[hsl(var(--muted-foreground))]
+            shadow-[var(--shadow-soft)]
+            outline-none
+            focus:border-[hsl(var(--ring))]
+            focus:ring-4 focus:ring-[hsl(var(--ring)/0.25)]
+          "
         />
       </div>
     </div>
   );
 
-  // ✅ No fixed widths. Everything truncates safely inside fixed table layout.
+  // Desktop table bodies
   const fullNameBody = (u: Row) => (
     <div className="min-w-0">
       <div className="text-sm font-semibold truncate">
@@ -328,14 +406,14 @@ export default function DashboardPage() {
     </div>
   );
 
-  const zoneBody = (u: Row) => {
+  const zoneBodyDesktop = (u: Row) => {
     const assigned = hasZone(u);
     return (
       <div className="min-w-0">
         <button
           type="button"
           onClick={() => setSelectedUserForZone(u)}
-          className="btn-base bg-emerald-500 hover:bg-emerald-400 text-[11px] sm:text-xs font-semibold text-white w-full"
+          className="btn-base bg-emerald-500 hover:bg-emerald-400 text-[11px] sm:text-xs font-semibold text-white whitespace-nowrap"
         >
           View / Update
         </button>
@@ -355,7 +433,7 @@ export default function DashboardPage() {
 
     if (!assigned) {
       return (
-        <span className="text-xs text-[hsl(var(--muted-foreground))] italic">
+        <span className="text-xs text-[hsl(var(--muted-foreground))] italic whitespace-nowrap">
           No zone
         </span>
       );
@@ -386,14 +464,14 @@ export default function DashboardPage() {
     );
   };
 
-  const trackBody = (u: Row) => {
+  const trackBodyDesktop = (u: Row) => {
     const assigned = hasZone(u);
     return (
       <button
         type="button"
         onClick={() => setSelectedUserForTrack(u)}
         disabled={!assigned}
-        className="btn-base bg-rose-500 hover:bg-rose-400 text-[11px] sm:text-xs font-semibold text-white w-full"
+        className="btn-base bg-rose-500 hover:bg-rose-400 text-[11px] sm:text-xs font-semibold text-white whitespace-nowrap"
         title={!assigned ? "Assign a zone first" : "Track user"}
       >
         Track
@@ -401,7 +479,7 @@ export default function DashboardPage() {
     );
   };
 
-  const logsBody = (u: Row) => {
+  const logsBodyDesktop = (u: Row) => {
     const assigned = hasZone(u);
     return (
       <div className="flex items-center justify-center gap-2 whitespace-nowrap">
@@ -427,6 +505,147 @@ export default function DashboardPage() {
       </div>
     );
   };
+
+  // Mobile card view
+  const MobileList = (
+    <div>
+      {usersError && (
+        <div className="px-4 sm:px-6 py-3 border-b border-[hsl(var(--border))] text-sm text-[hsl(var(--danger))]">
+          {usersError}
+        </div>
+      )}
+
+      {headerTemplate}
+
+      {users === null && (
+        <div className="px-4 sm:px-6 py-6 text-sm text-[hsl(var(--muted-foreground))]">
+          Loading users…
+        </div>
+      )}
+
+      {users !== null && filteredSortedRows.length === 0 && (
+        <div className="px-4 sm:px-6 py-6 text-sm text-[hsl(var(--muted-foreground))]">
+          No users yet.
+        </div>
+      )}
+
+      <div>
+        {mobilePageRows.map((u) => {
+          const assigned = hasZone(u);
+          const inside = isInsideZone(u);
+
+          return (
+            <div
+              key={u.id}
+              className="px-4 sm:px-6 py-4 border-t border-[hsl(var(--border))]"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="font-semibold truncate">
+                    {u.full_name || u.username || "—"}
+                  </div>
+                  <div className="mt-0.5 text-[11px] text-[hsl(var(--muted-foreground))] truncate">
+                    Last seen: {formatDateTime(u.last_seen)}
+                  </div>
+                </div>
+
+                <div className="shrink-0 text-xs font-semibold whitespace-nowrap">
+                  {!assigned ? (
+                    <span className="text-[hsl(var(--muted-foreground))] italic">
+                      No zone
+                    </span>
+                  ) : inside ? (
+                    <span className="text-[hsl(var(--success))]">Inside</span>
+                  ) : (
+                    <span className="text-[hsl(var(--danger))]">Outside</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                <div className="text-[hsl(var(--muted-foreground))]">
+                  <span className="font-semibold text-[hsl(var(--foreground))]">
+                    Username:
+                  </span>{" "}
+                  {u.username}
+                </div>
+                <div className="text-[hsl(var(--muted-foreground))]">
+                  <span className="font-semibold text-[hsl(var(--foreground))]">
+                    Contact:
+                  </span>{" "}
+                  {formatContact(u)}
+                </div>
+              </div>
+
+              <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedUserForZone(u)}
+                  className="btn-base bg-emerald-500 hover:bg-emerald-400 text-[11px] sm:text-xs font-semibold text-white w-full whitespace-nowrap"
+                >
+                  View / Update Zone
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedUserForTrack(u)}
+                  disabled={!assigned}
+                  className="btn-base bg-rose-500 hover:bg-rose-400 text-[11px] sm:text-xs font-semibold text-white w-full whitespace-nowrap"
+                  title={!assigned ? "Assign a zone first" : "Track user"}
+                >
+                  Track
+                </button>
+              </div>
+
+              <div className="mt-3 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleViewLogs(u.id)}
+                  disabled={!assigned}
+                  className="action-icon-btn inline-flex h-10 w-10 items-center justify-center rounded-full bg-amber-500 hover:bg-amber-400 text-base font-semibold transition-colors"
+                  title={!assigned ? "Assign a zone first" : "View logs"}
+                >
+                  <FaEye />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleDownloadUserLogs(u.id)}
+                  disabled={!assigned}
+                  className="action-icon-btn inline-flex h-10 w-10 items-center justify-center rounded-full bg-amber-500 hover:bg-amber-400 text-base font-semibold transition-colors"
+                  title={!assigned ? "Assign a zone first" : "Download CSV"}
+                >
+                  <FaDownload />
+                </button>
+
+                {!assigned && (
+                  <span className="ml-2 text-[11px] text-[hsl(var(--muted-foreground))]">
+                    Assign a zone to enable tracking/logs.
+                  </span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* paginator */}
+      {users !== null && filteredSortedRows.length > 0 && (
+        <Paginator
+          className="dashboard-paginator"
+          template="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink RowsPerPageDropdown"
+          first={first}
+          rows={rows}
+          totalRecords={filteredSortedRows.length}
+          rowsPerPageOptions={[10, 15, 25, 50]}
+          onPageChange={(e) => {
+            setFirst(e.first);
+            setRows(e.rows);
+          }}
+        />
+      )}
+    </div>
+  );
 
   return (
     <main className="min-h-screen bg-[var(--surface-root)] text-[hsl(var(--foreground))] flex flex-col">
@@ -536,84 +755,97 @@ export default function DashboardPage() {
         </div>
       </header>
 
-      {/* Table card */}
+      {/* Content */}
       <section className="flex-1 px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
         <div className="card">
-          {usersError && (
-            <div className="px-4 sm:px-6 py-3 border-b border-[hsl(var(--border))] text-sm text-[hsl(var(--danger))]">
-              {usersError}
-            </div>
-          )}
+          {/* ✅ MOBILE: card list (clean responsive) */}
+          {isMobile ? (
+            MobileList
+          ) : (
+            <>
+              {usersError && (
+                <div className="px-4 sm:px-6 py-3 border-b border-[hsl(var(--border))] text-sm text-[hsl(var(--danger))]">
+                  {usersError}
+                </div>
+              )}
 
-          <DataTable
-            value={rowsData}
-            dataKey="id"
-            className="dashboard-datatable"
-            header={headerTemplate}
-            globalFilter={globalFilter}
-            globalFilterFields={["fullNameSort", "username", "contactSort"]}
-            stripedRows
-            paginator
-            paginatorClassName="dashboard-paginator"
-            paginatorTemplate="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink RowsPerPageDropdown"
-            first={first}
-            rows={rows}
-            rowsPerPageOptions={[10, 15, 25, 50]}
-            onPage={(e: DataTablePageEvent) => {
-              setFirst(e.first);
-              setRows(e.rows);
-            }}
-            sortField={sortField}
-            sortOrder={sortOrder}
-            onSort={(e: DataTableSortEvent) => {
-              setSortField((e.sortField as string) || "fullNameSort");
-              setSortOrder((e.sortOrder as 1 | -1) || 1);
-              setFirst(0);
-            }}
-            // ✅ Prevent “horizontal scroll”: stack layout on small screens instead of scrolling
-            responsiveLayout="stack"
-            breakpoint="900px"
-            emptyMessage={users === null ? "Loading users…" : "No users yet."}
-          >
-            {/* Percent widths = always fit container (no x-scroll) */}
-            <Column
-              header="Full Name"
-              field="fullNameSort"
-              sortable
-              body={fullNameBody}
-              style={{ width: "23%" }}
-            />
-            <Column
-              header="Username"
-              field="username"
-              sortable
-              body={usernameBody}
-              style={{ width: "14%" }}
-            />
-            <Column
-              header="Contact"
-              field="contactSort"
-              sortable
-              body={contactBody}
-              style={{ width: "18%" }}
-            />
-            <Column
-              header="Assigned Zone"
-              field="zoneAssignedSort"
-              sortable
-              body={zoneBody}
-              style={{ width: "19%" }}
-            />
-            <Column
-              header="Status"
-              field="statusSort"
-              sortable
-              body={statusBody}
-              style={{ width: "10%" }}
-            />
-            <Column header="Track" body={trackBody} style={{ width: "8%" }} />
-            <Column header="Logs" body={logsBody} style={{ width: "8%" }} />
-          </DataTable>
+              <DataTable
+                value={rowsData}
+                dataKey="id"
+                className="dashboard-datatable"
+                header={headerTemplate}
+                globalFilter={globalFilter}
+                globalFilterFields={["fullNameSort", "username", "contactSort"]}
+                stripedRows
+                paginator
+                paginatorClassName="dashboard-paginator"
+                paginatorTemplate="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink RowsPerPageDropdown"
+                first={first}
+                rows={rows}
+                rowsPerPageOptions={[10, 15, 25, 50]}
+                onPage={(e: DataTablePageEvent) => {
+                  setFirst(e.first);
+                  setRows(e.rows);
+                }}
+                sortField={sortField}
+                sortOrder={sortOrder}
+                onSort={(e: DataTableSortEvent) => {
+                  setSortField((e.sortField as string) || "fullNameSort");
+                  setSortOrder((e.sortOrder as 1 | -1) || 1);
+                  setFirst(0);
+                }}
+                emptyMessage={
+                  users === null ? "Loading users…" : "No users yet."
+                }
+              >
+                <Column
+                  header="Full Name"
+                  field="fullNameSort"
+                  sortable
+                  body={fullNameBody}
+                  style={{ width: "22rem" }}
+                />
+                <Column
+                  header="Username"
+                  field="username"
+                  sortable
+                  body={usernameBody}
+                  style={{ width: "10rem" }}
+                />
+                <Column
+                  header="Contact"
+                  field="contactSort"
+                  sortable
+                  body={contactBody}
+                  style={{ width: "14rem" }}
+                />
+                <Column
+                  header="Assigned Zone"
+                  field="zoneAssignedSort"
+                  sortable
+                  body={zoneBodyDesktop}
+                  style={{ width: "14rem" }}
+                />
+                <Column
+                  header="Status"
+                  field="statusSort"
+                  sortable
+                  body={statusBody}
+                  style={{ width: "10rem" }}
+                />
+                <Column
+                  header="Track"
+                  body={trackBodyDesktop}
+                  style={{ width: "9rem" }}
+                />
+                <Column
+                  header="Logs"
+                  body={logsBodyDesktop}
+                  style={{ width: "10rem" }}
+                />
+              </DataTable>
+            </>
+          )}
         </div>
       </section>
 
