@@ -5,11 +5,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 
-import {
-  DataTable,
-  type DataTablePageEvent,
-  type DataTableSortEvent,
-} from "primereact/datatable";
+import { DataTable, type DataTablePageEvent } from "primereact/datatable";
 import { Column } from "primereact/column";
 import { Paginator } from "primereact/paginator";
 
@@ -58,14 +54,17 @@ type Row = User & {
   statusSort: number;
 };
 
-const TABLE_STATE_KEY = "geofence:datatable:v3";
+type ZoneFilter = "all" | "assigned" | "none";
+type StatusFilter = "all" | "outside" | "inside";
+
+const TABLE_STATE_KEY = "geofence:datatable:v4";
 
 type TableState = {
   first: number;
   rows: number;
-  sortField: string;
-  sortOrder: 1 | -1;
   globalFilter: string;
+  zoneFilter: ZoneFilter;
+  statusFilter: StatusFilter;
 };
 
 function useMediaQuery(query: string) {
@@ -125,12 +124,23 @@ function readTableState(): TableState | null {
     const raw = localStorage.getItem(TABLE_STATE_KEY);
     if (!raw) return null;
     const s = JSON.parse(raw) as Partial<TableState>;
+
+    const z: ZoneFilter =
+      s.zoneFilter === "assigned" || s.zoneFilter === "none"
+        ? s.zoneFilter
+        : "all";
+
+    const st: StatusFilter =
+      s.statusFilter === "inside" || s.statusFilter === "outside"
+        ? s.statusFilter
+        : "all";
+
     return {
       first: typeof s.first === "number" ? Math.max(0, s.first) : 0,
       rows: typeof s.rows === "number" ? Math.max(10, s.rows) : 10,
-      sortField: typeof s.sortField === "string" ? s.sortField : "fullNameSort",
-      sortOrder: s.sortOrder === -1 ? -1 : 1,
       globalFilter: typeof s.globalFilter === "string" ? s.globalFilter : "",
+      zoneFilter: z,
+      statusFilter: st,
     };
   } catch {
     return null;
@@ -144,13 +154,134 @@ function writeTableState(next: TableState) {
   } catch {}
 }
 
-function compareValues(a: unknown, b: unknown) {
-  if (a == null && b == null) return 0;
-  if (a == null) return -1;
-  if (b == null) return 1;
+/** Premium “pill” select that matches your inputs */
+function PillSelect(props: {
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+  ariaLabel: string;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const rootRef = React.useRef<HTMLDivElement | null>(null);
 
-  if (typeof a === "number" && typeof b === "number") return a - b;
-  return String(a).localeCompare(String(b));
+  const selected = props.options.find((o) => o.value === props.value);
+  const selectedLabel = selected?.label ?? props.options[0]?.label ?? "Select";
+
+  React.useEffect(() => {
+    if (!open) return;
+
+    const onDown = (e: MouseEvent | TouchEvent) => {
+      const t = e.target as Node | null;
+      if (rootRef.current && t && !rootRef.current.contains(t)) setOpen(false);
+    };
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("touchstart", onDown);
+    document.addEventListener("keydown", onKey);
+
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("touchstart", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div ref={rootRef} className="relative w-full">
+      <button
+        type="button"
+        aria-label={props.ariaLabel}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((p) => !p)}
+        className="
+          w-full
+          min-w-[210px] sm:min-w-[240px]
+          rounded-full
+          bg-[hsl(var(--surface-soft-hsl)/0.75)]
+          border border-[hsl(var(--border))]
+          px-4 py-2.5
+          text-sm text-[hsl(var(--foreground))]
+          shadow-[var(--shadow-soft)]
+          outline-none
+          transition
+          hover:border-[hsl(var(--border)/0.8)]
+          focus:border-[hsl(var(--ring))]
+          focus:ring-4 focus:ring-[hsl(var(--ring)/0.25)]
+          flex items-center justify-between gap-3
+        "
+      >
+        <span className="truncate">{selectedLabel}</span>
+
+        <svg
+          className={`h-4 w-4 shrink-0 text-[hsl(var(--muted-foreground))] transition-transform ${
+            open ? "rotate-180" : ""
+          }`}
+          viewBox="0 0 20 20"
+          fill="currentColor"
+          aria-hidden="true"
+        >
+          <path
+            fillRule="evenodd"
+            d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z"
+            clipRule="evenodd"
+          />
+        </svg>
+      </button>
+
+      {open && (
+        <div
+          role="listbox"
+          aria-label={props.ariaLabel}
+          className="
+      absolute left-0 right-0 mt-2 z-50
+      rounded-2xl
+      bg-[var(--surface)]
+      border border-[hsl(var(--border))]
+      shadow-[var(--shadow-elevated)]
+      p-1
+    "
+        >
+          {props.options.map((o) => {
+            const active = o.value === props.value;
+            return (
+              <button
+                key={o.value}
+                type="button"
+                role="option"
+                aria-selected={active}
+                onClick={() => {
+                  props.onChange(o.value);
+                  setOpen(false);
+                }}
+                className={`
+            w-full text-left px-3 py-2 rounded-xl text-sm
+            transition
+            ${
+              active
+                ? "bg-[hsl(var(--primary)/0.14)] text-[hsl(var(--foreground))] border border-[hsl(var(--primary)/0.35)]"
+                : "text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))]"
+            }
+          `}
+              >
+                {o.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function statusRank(u: User): number {
+  // Required order: no zone -> outside -> inside
+  if (!hasZone(u)) return 0;
+  return isInsideZone(u) ? 2 : 1;
 }
 
 export default function DashboardPage() {
@@ -174,25 +305,27 @@ export default function DashboardPage() {
   // Table state
   const [first, setFirst] = useState(0);
   const [rows, setRows] = useState(10);
-  const [sortField, setSortField] = useState<string>("fullNameSort");
-  const [sortOrder, setSortOrder] = useState<1 | -1>(1);
-  const [globalFilter, setGlobalFilter] = useState("");
 
-  // Restore table state
+  // Filters
+  const [globalFilter, setGlobalFilter] = useState("");
+  const [zoneFilter, setZoneFilter] = useState<ZoneFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+
+  // Restore state
   useEffect(() => {
     const saved = readTableState();
     if (!saved) return;
     setFirst(saved.first);
     setRows(saved.rows);
-    setSortField(saved.sortField);
-    setSortOrder(saved.sortOrder);
     setGlobalFilter(saved.globalFilter);
+    setZoneFilter(saved.zoneFilter);
+    setStatusFilter(saved.statusFilter);
   }, []);
 
-  // Persist table state
+  // Persist state
   useEffect(() => {
-    writeTableState({ first, rows, sortField, sortOrder, globalFilter });
-  }, [first, rows, sortField, sortOrder, globalFilter]);
+    writeTableState({ first, rows, globalFilter, zoneFilter, statusFilter });
+  }, [first, rows, globalFilter, zoneFilter, statusFilter]);
 
   // Auth guard
   useEffect(() => {
@@ -290,12 +423,14 @@ export default function DashboardPage() {
     }));
   }, [users]);
 
+  // ✅ Filters + required ordering: no zone -> outside -> inside
   const filteredSortedRows: Row[] = useMemo(() => {
     const q = globalFilter.trim().toLowerCase();
     let list = rowsData;
 
+    // Search filter
     if (q) {
-      list = rowsData.filter((r) => {
+      list = list.filter((r) => {
         return (
           r.fullNameSort.includes(q) ||
           r.username.toLowerCase().includes(q) ||
@@ -304,16 +439,28 @@ export default function DashboardPage() {
       });
     }
 
-    const field = sortField as keyof Row;
-    const order = sortOrder;
+    // Zone filter
+    if (zoneFilter === "assigned") {
+      list = list.filter((r) => hasZone(r));
+    } else if (zoneFilter === "none") {
+      list = list.filter((r) => !hasZone(r));
+    }
 
-    const sorted = [...list].sort((a, b) => {
-      const cmp = compareValues(a[field], b[field]);
-      return order === -1 ? -cmp : cmp;
+    // Status filter (only meaningful if zone assigned)
+    if (statusFilter === "inside") {
+      list = list.filter((r) => hasZone(r) && isInsideZone(r));
+    } else if (statusFilter === "outside") {
+      list = list.filter((r) => hasZone(r) && !isInsideZone(r));
+    }
+
+    // Stable ordering
+    return [...list].sort((a, b) => {
+      const ra = statusRank(a);
+      const rb = statusRank(b);
+      if (ra !== rb) return ra - rb;
+      return a.fullNameSort.localeCompare(b.fullNameSort);
     });
-
-    return sorted;
-  }, [rowsData, globalFilter, sortField, sortOrder]);
+  }, [rowsData, globalFilter, zoneFilter, statusFilter]);
 
   const mobilePageRows = useMemo(() => {
     return filteredSortedRows.slice(first, first + rows);
@@ -346,40 +493,71 @@ export default function DashboardPage() {
   };
 
   const headerTemplate = (
-    <div className="px-4 sm:px-6 py-4 border-b border-[hsl(var(--border))] flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
-      <div>
-        <p className="text-sm font-semibold">Users Overview</p>
-        <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1">
-          Full list of mobile users, their assigned zones and current status.
-        </p>
-      </div>
+    <div className="px-4 sm:px-6 py-4 border-b border-[hsl(var(--border))]">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold">Users Overview</p>
+          <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1">
+            Full list of mobile users, their assigned zones and current status.
+          </p>
+        </div>
 
-      <div className="flex items-center gap-2 min-w-0 w-full md:w-auto">
-        <span className="text-xs text-[hsl(var(--muted-foreground))] hidden md:inline">
-          Search
-        </span>
+        {/* Controls: keep responsive like the old small-screen design */}
+        <div className="w-full md:w-auto flex flex-col sm:flex-row gap-2 sm:items-center">
+          <div className="flex-1 sm:min-w-[18rem]">
+            <input
+              value={globalFilter}
+              onChange={(e) => {
+                setGlobalFilter(e.target.value);
+                setFirst(0);
+              }}
+              placeholder="Name / username / contact"
+              className="
+                w-full
+                rounded-full
+                bg-[hsl(var(--surface-soft-hsl)/0.75)]
+                border border-[hsl(var(--border))]
+                px-4 py-2.5
+                text-sm text-[hsl(var(--foreground))]
+                placeholder:text-[hsl(var(--muted-foreground))]
+                shadow-[var(--shadow-soft)]
+                outline-none
+                focus:border-[hsl(var(--ring))]
+                focus:ring-4 focus:ring-[hsl(var(--ring)/0.25)]
+              "
+            />
+          </div>
 
-        <input
-          value={globalFilter}
-          onChange={(e) => {
-            setGlobalFilter(e.target.value);
-            setFirst(0);
-          }}
-          placeholder="Name / username / contact"
-          className="
-            w-full md:w-[18rem]
-            rounded-full
-            bg-[hsl(var(--surface-soft-hsl)/0.75)]
-            border border-[hsl(var(--border))]
-            px-4 py-2.5
-            text-sm text-[hsl(var(--foreground))]
-            placeholder:text-[hsl(var(--muted-foreground))]
-            shadow-[var(--shadow-soft)]
-            outline-none
-            focus:border-[hsl(var(--ring))]
-            focus:ring-4 focus:ring-[hsl(var(--ring)/0.25)]
-          "
-        />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full sm:w-auto">
+            <PillSelect
+              ariaLabel="Zone filter"
+              value={zoneFilter}
+              onChange={(v) => {
+                setZoneFilter(v as ZoneFilter);
+                setFirst(0);
+              }}
+              options={[
+                { value: "all", label: "Zone: All" },
+                { value: "none", label: "Zone: No zone" },
+                { value: "assigned", label: "Zone: Assigned" },
+              ]}
+            />
+
+            <PillSelect
+              ariaLabel="Status filter"
+              value={statusFilter}
+              onChange={(v) => {
+                setStatusFilter(v as StatusFilter);
+                setFirst(0);
+              }}
+              options={[
+                { value: "all", label: "Status: All" },
+                { value: "outside", label: "Status: Outside" },
+                { value: "inside", label: "Status: Inside" },
+              ]}
+            />
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -758,7 +936,7 @@ export default function DashboardPage() {
       {/* Content */}
       <section className="flex-1 px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
         <div className="card">
-          {/* ✅ MOBILE: card list (clean responsive) */}
+          {/* MOBILE */}
           {isMobile ? (
             MobileList
           ) : (
@@ -770,12 +948,10 @@ export default function DashboardPage() {
               )}
 
               <DataTable
-                value={rowsData}
+                value={filteredSortedRows} // ✅ filtered + ordered list
                 dataKey="id"
                 className="dashboard-datatable"
                 header={headerTemplate}
-                globalFilter={globalFilter}
-                globalFilterFields={["fullNameSort", "username", "contactSort"]}
                 stripedRows
                 paginator
                 paginatorClassName="dashboard-paginator"
@@ -787,49 +963,32 @@ export default function DashboardPage() {
                   setFirst(e.first);
                   setRows(e.rows);
                 }}
-                sortField={sortField}
-                sortOrder={sortOrder}
-                onSort={(e: DataTableSortEvent) => {
-                  setSortField((e.sortField as string) || "fullNameSort");
-                  setSortOrder((e.sortOrder as 1 | -1) || 1);
-                  setFirst(0);
-                }}
                 emptyMessage={
                   users === null ? "Loading users…" : "No users yet."
                 }
               >
                 <Column
                   header="Full Name"
-                  field="fullNameSort"
-                  sortable
                   body={fullNameBody}
                   style={{ width: "22rem" }}
                 />
                 <Column
                   header="Username"
-                  field="username"
-                  sortable
                   body={usernameBody}
                   style={{ width: "10rem" }}
                 />
                 <Column
                   header="Contact"
-                  field="contactSort"
-                  sortable
                   body={contactBody}
                   style={{ width: "14rem" }}
                 />
                 <Column
                   header="Assigned Zone"
-                  field="zoneAssignedSort"
-                  sortable
                   body={zoneBodyDesktop}
                   style={{ width: "14rem" }}
                 />
                 <Column
                   header="Status"
-                  field="statusSort"
-                  sortable
                   body={statusBody}
                   style={{ width: "10rem" }}
                 />
